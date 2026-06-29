@@ -1,0 +1,17 @@
+/* Wisply Admin — minimal overrides for RTL WP admin */
+.wisply-admin { direction: rtl; font-family: "Open Sans Hebrew", Arial, sans-serif; }
+.wisply-admin h1 { color: #00A3A3; }
+.wisply-logo { margin-left: 8px; }
+.wisply-stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; margin: 20px 0; }
+.wisply-stat-card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 20px 16px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(0,163,163,0.07); }
+.wisply-stat-number { font-size: 36px; font-weight: 700; color: #00A3A3; }
+.wisply-stat-label  { font-size: 13px; color: #666; }
+.wisply-stat-card--action { justify-content: center; }
+.wisply-status-table td:first-child { font-weight: 600; width: 220px; }
+.wisply-filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; background: #f9f9f9; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; }
+.wisply-badge-warn { display: inline-block; background: #E53E3E; color: #fff; border-radius: 12px; padding: 2px 8px; font-size: 12px; font-weight: 700; }
+.wisply-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100000; display: flex; align-items: center; justify-content: center; }
+.wisply-modal-inner { background: #fff; border-radius: 12px; padding: 24px; min-width: 400px; max-width: 600px; width: 90vw; max-height: 80vh; overflow-y: auto; position: relative; direction: rtl; }
+.wisply-modal-close { position: absolute; top: 12px; left: 12px; background: none; border: none; font-size: 22px; cursor: pointer; color: #666; }
+.wisply-modal-inner dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; }
+.wisply-modal-inner dt { font-weight: 600; color: #444; }
