@@ -1,33 +1,23 @@
-# Wisply — AI Chat Assistant (WordPress, white-label)
+# Goldstein Studio — WordPress AI Chatbot Plugins
 
-A white-label AI chat assistant (text **and** voice) for any WordPress site. It answers
-**only** from your own site content (no hallucinations), in **Hebrew / English / Russian**,
-with full RTL support — and captures qualified, consent-backed leads.
+This repository holds **two** WordPress AI chat-assistant plugins that share the same
+engine and stay in feature-parity:
 
-> Working code name: **Wisply**. The public product name is configurable
-> (`WISPLY_PRODUCT_NAME` + `product_name` setting) and shown in the admin menu and the
-> "Powered by" credit — rebrand with no code edits.
+| Folder | Plugin | Purpose |
+|--------|--------|---------|
+| [`wisply-chatbot/`](wisply-chatbot/) | **Wisply — AI Chat Assistant** | The **white-label** product, sold/resold for any business. Fully generic, settings-driven persona, configurable product name & branding. |
+| [`medical360-chatbot/`](medical360-chatbot/) | **Medical360 Chatbot** | The **internal/source** build, tailored for the Medical Care (medical360.org) rehab hospital. Source of truth for new features. |
 
-## Highlights
-- **Content-grounded answers** — indexes your pages/posts/menus; replies only from real content.
-- **Voice** — real-time speech-to-speech (OpenAI Realtime) with a Whisper + TTS fallback.
-- **Proactive engagement** — page-aware teaser bubble + AI-generated, page-specific questions.
-- **Lead capture** — guided flow (choice buttons → yes/no → form), Opt-In consent, AI summary,
-  full context (UTM/referrer/department/landing), email + CSV + dashboard analytics.
-- **Fully settings-driven persona** — bot name, business name/type/description, suggested
-  questions, custom CTA buttons, colours.
-- **Emergency escalation** — configurable stop-and-refer message + hotline buttons.
+## How they relate
+Every new feature is built first in `medical360-chatbot/`, then mirrored into
+`wisply-chatbot/` in a **generic** form (no medical wording — uses persona variables and
+`product_name`). The two are kept in lockstep.
 
-## Install
-1. Zip the `wisply-chatbot` folder (or download the release zip).
-2. WordPress → Plugins → Add New → Upload Plugin → activate.
-3. Settings → set the OpenAI API key, branding/persona, and (optionally) voice.
-
-## Requirements
-- WordPress 6.0+, PHP 8.1+
-- An OpenAI API key (chat, voice, TTS). Realtime voice needs Realtime API access on the account.
+Each plugin is self-contained (its own `wisply-chatbot.php` / `medical360-chatbot.php`,
+classes, REST namespace and DB tables) and is installed independently by zipping its folder.
 
 ## Versioning
-See [CHANGELOG.md](CHANGELOG.md). Mirrors the internal Medical360 build feature-for-feature.
+Wisply releases are tracked in [`wisply-chatbot/CHANGELOG.md`](wisply-chatbot/CHANGELOG.md)
+and tagged (`vX.Y.Z`).
 
 © Goldstein Studio — proprietary.
