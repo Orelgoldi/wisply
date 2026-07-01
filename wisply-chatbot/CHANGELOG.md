@@ -3,6 +3,16 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [2.1.0] — 2026-07-01
+### Added
+- **Logicare CRM integration** — every captured lead is pushed to Logicare
+  (`POST /logicare/api/new_lead/`) in addition to the email + dashboard. Maps
+  name/phone/email + AI summary & transcript (`details`), interest (`referrer_notes`),
+  source (`referrer`), `campaign`, `landing`, `department_name`.
+- Settings: enable toggle, **Base URL**, and encrypted **API Key** (company UUID).
+- **System Check** validates the CRM key via `/logicare/api/auth/` and shows the company name.
+- Per-lead CRM sync status (✓/✗) shown in the leads table + CSV export.
+
 ## [2.0.0] — 2026-06-29
 Brought to full feature-parity with the internal Medical360 build (v4.2.0), kept fully white-label/generic.
 

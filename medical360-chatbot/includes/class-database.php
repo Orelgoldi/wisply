@@ -172,6 +172,10 @@ class M360_Database {
             'emergency_phone'     => '101',
             'emergency_eran_url'  => 'https://www.eran.org.il/',
             'emergency_sahar_url' => 'https://sahar.org.il/',
+            // Logicare CRM integration — push captured leads to the CRM
+            'logicare_enabled'   => '0',
+            'logicare_base_url'  => '',   // e.g. https://app.logicare.co.il (no trailing slash)
+            'logicare_api_key'   => '',   // company UUID (stored encrypted)
         ];
         foreach ( $defaults as $key => $value ) {
             $this->set_setting( $key, $value, false );
@@ -218,7 +222,7 @@ class M360_Database {
     // ─── Settings ─────────────────────────────────────────────────────────────
 
     /** Fields that contain secrets and must be stored encrypted. */
-    private const ENCRYPTED_KEYS = [ 'ai_api_key', 'openai_api_key' ];
+    private const ENCRYPTED_KEYS = [ 'ai_api_key', 'openai_api_key', 'logicare_api_key' ];
 
     public function get_setting( string $key, mixed $default = null ): mixed {
         $table = $this->db->prefix . self::TABLE_SETTINGS;

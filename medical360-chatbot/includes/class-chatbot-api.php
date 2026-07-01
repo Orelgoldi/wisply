@@ -279,6 +279,15 @@ class M360_Chatbot_API {
             'conversation_length'=> count( $ctx_rows ),
             'lead_status'        => 'new',
         ];
+        // Push to the Logicare CRM (if configured) and record the outcome on the lead
+        $crm = $this->send_to_logicare( [
+            'name' => $name, 'phone' => $phone, 'email' => $email,
+            'summary' => $summary, 'context' => $context, 'interest' => $interest,
+            'source' => $source, 'campaign' => $utm_campaign,
+            'landing_name' => $department, 'department' => $department,
+        ] );
+        $leads[ array_key_last( $leads ) ]['logicare'] = $crm['status'];
+
         if ( count( $leads ) > 1000 ) {
             $leads = array_slice( $leads, -1000 );
         }
@@ -353,6 +362,87 @@ class M360_Chatbot_API {
         $sent = wp_mail( $to, $subject, $body, $headers );
 
         return new WP_REST_Response( [ 'success' => true, 'mail_sent' => (bool) $sent ], 200 );
+    }
+
+    /**
+     * Push a captured lead to the Logicare CRM (POST /logicare/api/new_lead/).
+     * Returns [ 'status' => sent|failed:…|error:…|disabled|not_configured ].
+     */
+    private function send_to_logicare( array $lead ): array {
+        if ( $this->db->get_setting( 'logicare_enabled', '0' ) !== '1' ) {
+            return [ 'status' => 'disabled' ];
+        }
+        $base = rtrim( (string) $this->db->get_setting( 'logicare_base_url', '' ), '/' );
+        $key  = (string) $this->db->get_setting( 'logicare_api_key', '' );
+        if ( $base === '' || $key === '' ) {
+            return [ 'status' => 'not_configured' ];
+        }
+
+        $details = trim( (string) ( $lead['summary'] ?? '' ) );
+        if ( ! empty( $lead['context'] ) ) {
+            $details .= ( $details !== '' ? "\n\n" : '' ) . $lead['context'];
+        }
+
+        $payload = [
+            'api_key'         => $key,
+            'name'            => (string) ( $lead['name'] ?? '' ),
+            'phone1'          => preg_replace( '/[^\d+]/', '', (string) ( $lead['phone'] ?? '' ) ),
+            'details'         => mb_substr( $details, 0, 5000 ),
+            'referrer_notes'  => mb_substr( (string) ( $lead['interest'] ?? '' ), 0, 300 ),
+            'referrer'        => (string) ( $lead['source'] ?? '' ) ?: 'בוט האתר',
+            'campaign'        => (string) ( $lead['campaign'] ?? '' ),
+            'landing'         => (string) ( $lead['landing_name'] ?? '' ),
+            'department_name' => (string) ( $lead['department'] ?? '' ),
+        ];
+        if ( ! empty( $lead['email'] ) && is_email( $lead['email'] ) ) {
+            $payload['email'] = $lead['email'];
+        }
+        // Drop empty optional fields (keep required ones)
+        foreach ( [ 'referrer_notes', 'campaign', 'landing', 'department_name' ] as $opt ) {
+            if ( $payload[ $opt ] === '' ) unset( $payload[ $opt ] );
+        }
+
+        $resp = wp_remote_post( $base . '/logicare/api/new_lead/', [
+            'timeout' => 20,
+            'headers' => [ 'Content-Type' => 'application/json', 'Accept' => 'application/json' ],
+            'body'    => wp_json_encode( $payload ),
+        ] );
+
+        if ( is_wp_error( $resp ) ) {
+            error_log( '[Medical360] Logicare error: ' . $resp->get_error_message() );
+            return [ 'status' => 'error: ' . $resp->get_error_message() ];
+        }
+        $code = wp_remote_retrieve_response_code( $resp );
+        $body = json_decode( wp_remote_retrieve_body( $resp ), true );
+        if ( $code === 201 && ! empty( $body['success'] ) ) {
+            error_log( '[Medical360] Logicare: lead sent (' . ( $body['response'] ?? 'new' ) . ')' );
+            return [ 'status' => 'sent' ];
+        }
+        $err = is_array( $body ) ? wp_json_encode( $body ) : substr( (string) wp_remote_retrieve_body( $resp ), 0, 200 );
+        error_log( '[Medical360] Logicare failed (HTTP ' . $code . '): ' . $err );
+        return [ 'status' => 'failed: HTTP ' . $code ];
+    }
+
+    /** Validate the Logicare API key/base via /logicare/api/auth/ (used by System Check). */
+    public function logicare_test(): array {
+        $base = rtrim( (string) $this->db->get_setting( 'logicare_base_url', '' ), '/' );
+        $key  = (string) $this->db->get_setting( 'logicare_api_key', '' );
+        if ( $base === '' || $key === '' ) {
+            return [ 'ok' => false, 'detail' => 'לא הוגדר base URL או מפתח Logicare' ];
+        }
+        $resp = wp_remote_post( $base . '/logicare/api/auth/', [
+            'timeout' => 15,
+            'headers' => [ 'Content-Type' => 'application/json' ],
+            'body'    => wp_json_encode( [ 'api_key' => $key ] ),
+        ] );
+        if ( is_wp_error( $resp ) ) {
+            return [ 'ok' => false, 'detail' => $resp->get_error_message() ];
+        }
+        $body = json_decode( wp_remote_retrieve_body( $resp ), true );
+        if ( ! empty( $body['success'] ) ) {
+            return [ 'ok' => true, 'detail' => 'מחובר: ' . ( $body['company'] ?? $body['name'] ?? '' ) ];
+        }
+        return [ 'ok' => false, 'detail' => 'מפתח/כתובת לא תקינים (HTTP ' . wp_remote_retrieve_response_code( $resp ) . ')' ];
     }
 
     /** Plain-text transcript of the conversation context, stored with the lead. */
@@ -536,10 +626,11 @@ class M360_Chatbot_API {
             'consent_required', 'consent_version', 'consent_text_he', 'consent_text_en', 'consent_text_ru',
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
+            'logicare_enabled', 'logicare_base_url', 'logicare_api_key',
         ];
 
         $params      = $request->get_json_params();
-        $secret_keys = [ 'ai_api_key', 'openai_api_key' ];
+        $secret_keys = [ 'ai_api_key', 'openai_api_key', 'logicare_api_key' ];
         $errors      = [];
 
         foreach ( $allowed as $key ) {
