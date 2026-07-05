@@ -29,11 +29,13 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'logicare_enabled', 'logicare_base_url', 'logicare_api_key',
+            'report_recipients', 'report_daily', 'report_weekly',
         ];
         // Multi-line fields must keep their newlines
         $textarea_keys = [
             'business_description', 'greeting_he', 'greeting_en', 'greeting_ru',
             'suggested_questions_he', 'suggested_questions_en', 'suggested_questions_ru',
+            'report_recipients',
         ];
         // Checkboxes don't POST when unchecked — normalise to 0/1
         $_POST['voice_enabled']     = isset( $_POST['voice_enabled'] )     ? '1' : '0';
@@ -41,6 +43,8 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
         $_POST['proactive_enabled'] = isset( $_POST['proactive_enabled'] ) ? '1' : '0';
         $_POST['consent_required']  = isset( $_POST['consent_required'] )  ? '1' : '0';
         $_POST['logicare_enabled']  = isset( $_POST['logicare_enabled'] )  ? '1' : '0';
+        $_POST['report_daily']      = isset( $_POST['report_daily'] )      ? '1' : '0';
+        $_POST['report_weekly']     = isset( $_POST['report_weekly'] )     ? '1' : '0';
         $secret_keys = [ 'ai_api_key', 'openai_api_key', 'logicare_api_key' ];
         $db          = Wisply_Database::get_instance();
 
@@ -122,6 +126,17 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
     <form method="post" action="">
         <?php wp_nonce_field( 'wisply_save_settings', 'wisply_settings_nonce' ); ?>
 
+        <div class="wisply-tabs" role="tablist">
+            <button type="button" class="wisply-tab-btn active" data-target="brand">🏷️ מיתוג</button>
+            <button type="button" class="wisply-tab-btn" data-target="ai">🤖 AI</button>
+            <button type="button" class="wisply-tab-btn" data-target="voice">🎙️ קול</button>
+            <button type="button" class="wisply-tab-btn" data-target="proactive">🔔 בועית יזומה</button>
+            <button type="button" class="wisply-tab-btn" data-target="leads">📥 לידים ו-CRM</button>
+            <button type="button" class="wisply-tab-btn" data-target="design">🎨 עיצוב ותוכן</button>
+            <button type="button" class="wisply-tab-btn" data-target="advanced">⚙️ מתקדם</button>
+        </div>
+
+        <div class="wisply-pane active" data-pane="brand">
         <h2>🏷️ זהות ומיתוג (White-Label)</h2>
         <table class="form-table">
             <tr>
@@ -173,6 +188,7 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
         <p><button type="button" class="button" id="wisply-cta-add">➕ הוספת כפתור</button></p>
         <input type="hidden" name="action_buttons" id="wisply-cta-json" value="<?php echo esc_attr( $settings['action_buttons'] ?? '' ); ?>">
 
+        </div><div class="wisply-pane" data-pane="ai">
         <h2>🤖 ספק AI</h2>
         <table class="form-table">
             <tr>
@@ -229,6 +245,7 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
             </tr>
         </table>
 
+        </div><div class="wisply-pane" data-pane="voice">
         <h2>🎙️ שיחת קול (Voice)</h2>
         <table class="form-table">
             <tr>
@@ -325,6 +342,7 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
             </tr>
         </table>
 
+        </div><div class="wisply-pane" data-pane="proactive">
         <h2>🔔 התראה יזומה (בועית פנייה לפי דף)</h2>
         <table class="form-table">
             <tr>
@@ -363,6 +381,7 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
             </tr>
         </table>
 
+        </div><div class="wisply-pane" data-pane="leads">
         <h2>📋 הסכמה שיווקית (Opt-In) — חובה משפטית</h2>
         <table class="form-table">
             <tr>
@@ -459,6 +478,26 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
             </tr>
         </table>
 
+        <h2>📧 דוחות לידים אוטומטיים</h2>
+        <table class="form-table">
+            <tr>
+                <th>נמעני הדוח</th>
+                <td>
+                    <textarea name="report_recipients" rows="3" class="large-text" dir="ltr" placeholder="name@example.com, manager@example.com"><?php echo esc_textarea( $settings['report_recipients'] ?? '' ); ?></textarea>
+                    <p class="description">מיילים לקבלת דוחות הלידים (מופרדים בפסיק / רווח / שורה). השאירו ריק כדי לא לשלוח.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>תדירות</th>
+                <td>
+                    <label><input type="checkbox" name="report_daily" value="1" <?php checked( ( $settings['report_daily'] ?? '1' ), '1' ); ?>> דוח יומי (כל בוקר)</label><br>
+                    <label><input type="checkbox" name="report_weekly" value="1" <?php checked( ( $settings['report_weekly'] ?? '1' ), '1' ); ?>> דוח שבועי (יום ב׳ בבוקר)</label>
+                    <p class="description">כל דוח כולל את הלידים החדשים מהתקופה, מחולקים ל🎯 שיווקי / 💼 דרושים, עם קובץ CSV מצורף.</p>
+                </td>
+            </tr>
+        </table>
+
+        </div><div class="wisply-pane" data-pane="design">
         <h2>🎨 עיצוב Widget</h2>
         <table class="form-table">
             <tr>
@@ -520,6 +559,7 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
             </tr>
         </table>
 
+        </div><div class="wisply-pane" data-pane="advanced">
         <h2>🗑️ שמירת נתונים</h2>
         <table class="form-table">
             <tr>
@@ -530,12 +570,38 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
                 </td>
             </tr>
         </table>
+        </div><!-- /.wisply-pane advanced -->
 
         <p class="submit">
             <button type="submit" class="button button-primary button-large">שמור הגדרות</button>
         </p>
     </form>
 </div>
+
+<style>
+.wisply-tabs { display:flex; flex-wrap:wrap; gap:6px; border-bottom:2px solid #e2e8f0; margin:8px 0 20px; }
+.wisply-tab-btn { background:transparent; border:0; border-bottom:3px solid transparent; padding:10px 16px; font-size:14px; font-weight:600; color:#556; cursor:pointer; border-radius:6px 6px 0 0; margin-bottom:-2px; }
+.wisply-tab-btn:hover { background:#f1f5f9; color:#00A3A3; }
+.wisply-tab-btn.active { color:#00A3A3; border-bottom-color:#00A3A3; background:#f0fafa; }
+.wisply-pane { display:none; }
+.wisply-pane.active { display:block; animation:wisplyFade .18s ease; }
+@keyframes wisplyFade { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+</style>
+<script>
+(function() {
+    const btns  = document.querySelectorAll('.wisply-tab-btn');
+    const panes = document.querySelectorAll('.wisply-pane');
+    function show(target) {
+        btns.forEach(b => b.classList.toggle('active', b.dataset.target === target));
+        panes.forEach(p => p.classList.toggle('active', p.dataset.pane === target));
+        try { localStorage.setItem('wisply_settings_tab', target); } catch (e) {}
+    }
+    btns.forEach(b => b.addEventListener('click', () => show(b.dataset.target)));
+    let saved = 'brand';
+    try { saved = localStorage.getItem('wisply_settings_tab') || 'brand'; } catch (e) {}
+    if (document.querySelector('.wisply-pane[data-pane="' + saved + '"]')) show(saved);
+})();
+</script>
 
 <script>
 (function() {

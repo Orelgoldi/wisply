@@ -250,6 +250,9 @@ class Wisply_Chatbot_API {
         $summary  = $this->ai->summarize_conversation( $ctx_rows, $lang ); // FR-007 auto-summary
         $now      = current_time( 'mysql' );
 
+        // Classify the inquiry: job-seeker vs. marketing lead
+        $lead_type = $this->classify_lead_type( $context . ' ' . $interest . ' ' . $department . ' ' . $message );
+
         // Save the lead with the full data model (section 12)
         $leads   = get_option( 'wisply_leads', [] );
         $leads[] = [
@@ -260,6 +263,7 @@ class Wisply_Chatbot_API {
             'lang'               => $lang,
             'time'               => $now,
             'page'               => $page_url,
+            'lead_type'          => $lead_type,   // 'job' | 'marketing'
             'interest'           => $interest,
             'interest_category'  => $department ?: $interest,
             'context'            => $context,
@@ -362,6 +366,24 @@ class Wisply_Chatbot_API {
         $sent = wp_mail( $to, $subject, $body, $headers );
 
         return new WP_REST_Response( [ 'success' => true, 'mail_sent' => (bool) $sent ], 200 );
+    }
+
+    /**
+     * Classify an inquiry as a job-seeker ('job') or a marketing lead ('marketing')
+     * by scanning the conversation for career-related keywords (HE / EN / RU).
+     */
+    private function classify_lead_type( string $text ): string {
+        $t = mb_strtolower( $text );
+        $job_kw = [
+            'דרוש', 'דרושים', 'משרה', 'משרות', 'קריירה', 'גיוס', 'מגייס', 'מועמד',
+            'קורות חיים', 'קו״ח', 'קו"ח', 'להגיש מועמדות', 'מחפש עבודה', 'מחפשת עבודה',
+            'job', 'career', 'hiring', 'vacancy', 'recruit', 'employment', 'resume', 'cv',
+            'ваканс', 'работу', 'карьер', 'резюме',
+        ];
+        foreach ( $job_kw as $k ) {
+            if ( mb_strpos( $t, mb_strtolower( $k ) ) !== false ) return 'job';
+        }
+        return 'marketing';
     }
 
     /**

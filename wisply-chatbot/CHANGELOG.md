@@ -3,6 +3,25 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [2.2.0] — 2026-07-05
+### Added
+- **Lead classification (marketing vs. job-seeker)** — every inquiry is auto-tagged
+  `marketing` / `job` by scanning the conversation for career keywords (HE/EN/RU).
+  Leads screen gets filter tabs (הכל / 🎯 שיווקי / 💼 דרושים) with live counts, a
+  per-lead type badge, and a type-aware CSV export (adds a "סוג" column).
+- **Automated leads reports** — daily (every morning) + weekly (Monday) email digests
+  to configurable recipients. Each report splits marketing vs. job-seeker leads into
+  HTML tables and attaches a period CSV. New settings: recipient emails + daily/weekly
+  toggles (WP-Cron `wisply_daily_leads_report` / `wisply_weekly_leads_report`).
+- **Tabbed settings screen** — the long settings page is now organised into tabs
+  (🏷️ מיתוג · 🤖 AI · 🎙️ קול · 🔔 בועית יזומה · 📥 לידים ו-CRM · 🎨 עיצוב ותוכן · ⚙️ מתקדם),
+  a single form so everything still saves together; active tab persists via localStorage.
+
+### Fixed
+- Settings save/display hardening — `wp_unslash` on all inputs, textarea fields keep
+  their newlines, checkboxes normalise to 0/1, and dropdowns/values read live from the
+  DB store so saved settings always render (no reverting to generic defaults).
+
 ## [2.1.0] — 2026-07-01
 ### Added
 - **Logicare CRM integration** — every captured lead is pushed to Logicare

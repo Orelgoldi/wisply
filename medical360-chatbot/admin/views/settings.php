@@ -25,6 +25,7 @@ if ( isset( $_POST['m360_settings_nonce'] ) ) {
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'logicare_enabled', 'logicare_base_url', 'logicare_api_key',
+            'report_recipients', 'report_daily', 'report_weekly',
         ];
         // Checkboxes don't POST when unchecked — normalise to 0/1
         $_POST['voice_enabled']     = isset( $_POST['voice_enabled'] )     ? '1' : '0';
@@ -32,12 +33,24 @@ if ( isset( $_POST['m360_settings_nonce'] ) ) {
         $_POST['proactive_enabled'] = isset( $_POST['proactive_enabled'] ) ? '1' : '0';
         $_POST['consent_required']  = isset( $_POST['consent_required'] )  ? '1' : '0';
         $_POST['logicare_enabled']  = isset( $_POST['logicare_enabled'] )  ? '1' : '0';
+        $_POST['report_daily']      = isset( $_POST['report_daily'] )      ? '1' : '0';
+        $_POST['report_weekly']     = isset( $_POST['report_weekly'] )     ? '1' : '0';
         $secret_keys = [ 'ai_api_key', 'openai_api_key', 'logicare_api_key' ];
+        // Multi-line fields must keep their newlines
+        $textarea_keys = [
+            'greeting_he', 'greeting_en', 'greeting_ru',
+            'consent_text_he', 'consent_text_en', 'consent_text_ru',
+            'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
+            'proactive_msg_he', 'proactive_msg_en', 'proactive_msg_ru',
+            'report_recipients',
+        ];
         $db          = M360_Database::get_instance();
 
         foreach ( $allowed as $key ) {
             if ( ! isset( $_POST[ $key ] ) ) continue;
-            $val = sanitize_text_field( (string) $_POST[ $key ] );
+            $val = in_array( $key, $textarea_keys, true )
+                ? sanitize_textarea_field( (string) wp_unslash( $_POST[ $key ] ) )
+                : sanitize_text_field( (string) wp_unslash( $_POST[ $key ] ) );
             // Skip empty secret fields — don't wipe stored key
             if ( in_array( $key, $secret_keys, true ) && empty( $val ) ) continue;
             $db->set_setting( $key, $val );
@@ -51,13 +64,21 @@ $settings = $db->get_all_settings();
 $api_key_he = ! empty( $settings['openai_api_key'] ) ? '✅ מפתח מוגדר — הכנס מפתח חדש להחלפה' : 'sk-...';
 $api_key_claude = ! empty( $settings['ai_api_key'] ) ? '✅ מפתח מוגדר — הכנס מפתח חדש להחלפה' : 'sk-ant-...';
 
+// This view is require()'d inside a method, so read settings from the DB — a
+// `global $settings` would NOT reach the method-local $settings above, which made
+// every dropdown fall back to its default instead of the saved value.
+function m360_settings_store(): array {
+    static $s = null;
+    if ( $s === null ) { $s = M360_Database::get_instance()->get_all_settings(); }
+    return $s;
+}
 function m360_v( string $key, mixed $default = '' ): string {
-    global $settings;
-    return esc_attr( $settings[ $key ] ?? $default );
+    $s = m360_settings_store();
+    return esc_attr( $s[ $key ] ?? $default );
 }
 function m360_sel( string $key, string $val ): string {
-    global $settings;
-    return ( ( $settings[ $key ] ?? '' ) === $val ) ? 'selected' : '';
+    $s = m360_settings_store();
+    return ( ( $s[ $key ] ?? '' ) === $val ) ? 'selected' : '';
 }
 ?>
 <div class="wrap m360-admin" dir="rtl">
@@ -78,6 +99,16 @@ function m360_sel( string $key, string $val ): string {
     <form method="post" action="">
         <?php wp_nonce_field( 'm360_save_settings', 'm360_settings_nonce' ); ?>
 
+        <div class="m360-tabs" role="tablist">
+            <button type="button" class="m360-tab-btn active" data-target="ai">🤖 AI</button>
+            <button type="button" class="m360-tab-btn" data-target="voice">🎙️ קול</button>
+            <button type="button" class="m360-tab-btn" data-target="proactive">🔔 בועית יזומה</button>
+            <button type="button" class="m360-tab-btn" data-target="leads">📥 לידים ו-CRM</button>
+            <button type="button" class="m360-tab-btn" data-target="design">🎨 עיצוב ותוכן</button>
+            <button type="button" class="m360-tab-btn" data-target="advanced">⚙️ מתקדם</button>
+        </div>
+
+        <div class="m360-pane active" data-pane="ai">
         <h2>🤖 ספק AI</h2>
         <table class="form-table">
             <tr>
@@ -134,6 +165,7 @@ function m360_sel( string $key, string $val ): string {
             </tr>
         </table>
 
+        </div><div class="m360-pane" data-pane="voice">
         <h2>🎙️ שיחת קול (Voice)</h2>
         <table class="form-table">
             <tr>
@@ -230,6 +262,7 @@ function m360_sel( string $key, string $val ): string {
             </tr>
         </table>
 
+        </div><div class="m360-pane" data-pane="proactive">
         <h2>🔔 התראה יזומה (בועית פנייה לפי דף)</h2>
         <table class="form-table">
             <tr>
@@ -268,6 +301,7 @@ function m360_sel( string $key, string $val ): string {
             </tr>
         </table>
 
+        </div><div class="m360-pane" data-pane="leads">
         <h2>📋 הסכמה שיווקית (Opt-In) — חובה משפטית</h2>
         <table class="form-table">
             <tr>
@@ -364,6 +398,26 @@ function m360_sel( string $key, string $val ): string {
             </tr>
         </table>
 
+        <h2>📧 דוחות לידים אוטומטיים</h2>
+        <table class="form-table">
+            <tr>
+                <th>נמעני הדוח</th>
+                <td>
+                    <textarea name="report_recipients" rows="3" class="large-text" dir="ltr" placeholder="name@example.com, manager@example.com"><?php echo esc_textarea( $settings['report_recipients'] ?? '' ); ?></textarea>
+                    <p class="description">מיילים לקבלת דוחות הלידים (מופרדים בפסיק / רווח / שורה). השאירו ריק כדי לא לשלוח.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>תדירות</th>
+                <td>
+                    <label><input type="checkbox" name="report_daily" value="1" <?php checked( ( $settings['report_daily'] ?? '1' ), '1' ); ?>> דוח יומי (כל בוקר)</label><br>
+                    <label><input type="checkbox" name="report_weekly" value="1" <?php checked( ( $settings['report_weekly'] ?? '1' ), '1' ); ?>> דוח שבועי (יום ב׳ בבוקר)</label>
+                    <p class="description">כל דוח כולל את הלידים החדשים מהתקופה, מחולקים ל🎯 שיווקי / 💼 דרושים, עם קובץ CSV מצורף.</p>
+                </td>
+            </tr>
+        </table>
+
+        </div><div class="m360-pane" data-pane="design">
         <h2>🎨 עיצוב Widget</h2>
         <table class="form-table">
             <tr>
@@ -425,6 +479,7 @@ function m360_sel( string $key, string $val ): string {
             </tr>
         </table>
 
+        </div><div class="m360-pane" data-pane="advanced">
         <h2>🗑️ שמירת נתונים</h2>
         <table class="form-table">
             <tr>
@@ -435,6 +490,7 @@ function m360_sel( string $key, string $val ): string {
                 </td>
             </tr>
         </table>
+        </div><!-- /.m360-pane advanced -->
 
         <p class="submit">
             <button type="submit" class="button button-primary button-large">שמור הגדרות</button>
@@ -532,5 +588,28 @@ function m360_sel( string $key, string $val ): string {
             }
         });
     }
+})();
+</script>
+
+<style>
+.m360-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 22px;border-bottom:2px solid #e0e0e0}
+.m360-tab-btn{background:transparent;border:none;border-bottom:3px solid transparent;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;color:#555;margin-bottom:-2px;border-radius:6px 6px 0 0}
+.m360-tab-btn:hover{background:#f0f0f1;color:#000}
+.m360-tab-btn.active{color:#00A3A3;border-bottom-color:#00A3A3}
+.m360-pane{display:none}
+.m360-pane.active{display:block}
+</style>
+<script>
+(function(){
+  var btns  = document.querySelectorAll('.m360-tab-btn');
+  var panes = document.querySelectorAll('.m360-pane');
+  function show(name){
+    btns.forEach(function(b){ b.classList.toggle('active', b.dataset.target===name); });
+    panes.forEach(function(p){ p.classList.toggle('active', p.dataset.pane===name); });
+    try{ localStorage.setItem('m360_settings_tab', name); }catch(e){}
+  }
+  btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.dataset.target); }); });
+  var last=''; try{ last=localStorage.getItem('m360_settings_tab')||''; }catch(e){}
+  if(last && document.querySelector('.m360-pane[data-pane="'+last+'"]')) show(last);
 })();
 </script>

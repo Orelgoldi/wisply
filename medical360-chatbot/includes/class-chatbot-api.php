@@ -248,6 +248,8 @@ class M360_Chatbot_API {
         $context  = $this->format_lead_context( $ctx_rows );
         $interest = $this->lead_interest( $ctx_rows );          // last thing the user asked about
         $summary  = $this->ai->summarize_conversation( $ctx_rows, $lang ); // FR-007 auto-summary
+        // Classify: job-seeker vs marketing inquiry (from the conversation + interest + dept)
+        $lead_type = $this->classify_lead_type( $context . ' ' . $interest . ' ' . $department . ' ' . $message );
         $now      = current_time( 'mysql' );
 
         // Save the lead with the full data model (section 12)
@@ -278,6 +280,7 @@ class M360_Chatbot_API {
             'consent_time'       => $consent ? $now : '',
             'conversation_length'=> count( $ctx_rows ),
             'lead_status'        => 'new',
+            'lead_type'          => $lead_type,   // 'job' | 'marketing'
         ];
         // Push to the Logicare CRM (if configured) and record the outcome on the lead
         $crm = $this->send_to_logicare( [
@@ -362,6 +365,24 @@ class M360_Chatbot_API {
         $sent = wp_mail( $to, $subject, $body, $headers );
 
         return new WP_REST_Response( [ 'success' => true, 'mail_sent' => (bool) $sent ], 200 );
+    }
+
+    /**
+     * Classify a lead as a job-seeker ('job') or a marketing inquiry ('marketing'),
+     * based on career/recruitment keywords in the conversation.
+     */
+    private function classify_lead_type( string $text ): string {
+        $t = mb_strtolower( $text );
+        $job_kw = [
+            'דרוש', 'דרושים', 'משרה', 'משרות', 'קריירה', 'גיוס', 'מגייס', 'מועמד',
+            'קורות חיים', 'קו״ח', 'קו"ח', 'להגיש מועמדות', 'מחפש עבודה', 'מחפשת עבודה',
+            'job', 'career', 'hiring', 'vacancy', 'recruit', 'employment', 'resume', 'cv',
+            'ваканс', 'работу', 'карьер', 'резюме',
+        ];
+        foreach ( $job_kw as $k ) {
+            if ( mb_strpos( $t, mb_strtolower( $k ) ) !== false ) return 'job';
+        }
+        return 'marketing';
     }
 
     /**
@@ -627,6 +648,7 @@ class M360_Chatbot_API {
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'logicare_enabled', 'logicare_base_url', 'logicare_api_key',
+            'report_recipients', 'report_daily', 'report_weekly',
         ];
 
         $params      = $request->get_json_params();

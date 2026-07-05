@@ -53,6 +53,8 @@ class Wisply_Database {
     public static function deactivate(): void {
         wp_clear_scheduled_hook( 'wisply_cleanup_old_conversations' );
         wp_clear_scheduled_hook( 'wisply_reindex_content' );
+        wp_clear_scheduled_hook( 'wisply_daily_leads_report' );
+        wp_clear_scheduled_hook( 'wisply_weekly_leads_report' );
     }
 
     // ─── Table creation ───────────────────────────────────────────────────────
@@ -204,6 +206,10 @@ class Wisply_Database {
             'logicare_enabled'   => '0',
             'logicare_base_url'  => '',   // e.g. https://app.logicare.co.il (no trailing slash)
             'logicare_api_key'   => '',   // company UUID (stored encrypted)
+            // Automated leads reports (daily / weekly digest by email)
+            'report_recipients'  => '',   // comma / newline separated emails
+            'report_daily'       => '1',
+            'report_weekly'      => '1',
         ];
         foreach ( $defaults as $key => $value ) {
             $this->set_setting( $key, $value, false );
@@ -226,6 +232,98 @@ class Wisply_Database {
         add_action( 'wisply_reindex_content', function () {
             Wisply_Content_Indexer::get_instance()->full_reindex();
         } );
+    }
+
+    /**
+     * Register the scheduled leads-report cron (daily + weekly). Called on every
+     * load so the action callbacks exist when WP-Cron fires.
+     */
+    public function register_reports(): void {
+        add_filter( 'cron_schedules', function ( $s ) {
+            if ( ! isset( $s['weekly'] ) ) {
+                $s['weekly'] = [ 'interval' => WEEK_IN_SECONDS, 'display' => 'Once Weekly' ];
+            }
+            return $s;
+        } );
+        if ( ! wp_next_scheduled( 'wisply_daily_leads_report' ) ) {
+            wp_schedule_event( strtotime( 'tomorrow 8:00' ), 'daily', 'wisply_daily_leads_report' );
+        }
+        if ( ! wp_next_scheduled( 'wisply_weekly_leads_report' ) ) {
+            wp_schedule_event( strtotime( 'next monday 8:00' ), 'weekly', 'wisply_weekly_leads_report' );
+        }
+        add_action( 'wisply_daily_leads_report',  fn() => $this->send_leads_report( 'day' ) );
+        add_action( 'wisply_weekly_leads_report', fn() => $this->send_leads_report( 'week' ) );
+    }
+
+    /** Build + email a leads digest for the period ('day' | 'week') to the configured recipients. */
+    public function send_leads_report( string $period ): void {
+        $enabled = $this->get_setting( $period === 'day' ? 'report_daily' : 'report_weekly', '1' );
+        if ( $enabled !== '1' ) return;
+
+        $to = array_values( array_filter(
+            array_map( 'trim', preg_split( '/[,;\s]+/', (string) $this->get_setting( 'report_recipients', '' ) ) ),
+            'is_email'
+        ) );
+        if ( empty( $to ) ) return;
+
+        $since  = $period === 'day' ? strtotime( '-1 day' ) : strtotime( '-7 days' );
+        $leads  = array_reverse( (array) get_option( 'wisply_leads', [] ) );
+        $recent = array_values( array_filter( $leads, fn( $l ) => strtotime( (string) ( $l['time'] ?? '' ) ) >= $since ) );
+
+        $jobs = array_filter( $recent, fn( $l ) => ( $l['lead_type'] ?? 'marketing' ) === 'job' );
+        $mkt  = array_filter( $recent, fn( $l ) => ( $l['lead_type'] ?? 'marketing' ) !== 'job' );
+        $period_he = $period === 'day' ? 'יומי' : 'שבועי';
+
+        $section = function ( string $title, array $set ): string {
+            $rows = '';
+            if ( empty( $set ) ) {
+                $rows = '<tr><td colspan="5" style="color:#999;padding:8px">— אין —</td></tr>';
+            } else {
+                foreach ( $set as $l ) {
+                    $rows .= '<tr>'
+                        . '<td style="padding:6px 10px;border-bottom:1px solid #eee">' . esc_html( $l['time'] ?? '' ) . '</td>'
+                        . '<td style="padding:6px 10px;border-bottom:1px solid #eee">' . esc_html( $l['name'] ?? '' ) . '</td>'
+                        . '<td style="padding:6px 10px;border-bottom:1px solid #eee">' . esc_html( $l['phone'] ?? '' ) . '</td>'
+                        . '<td style="padding:6px 10px;border-bottom:1px solid #eee">' . esc_html( $l['interest'] ?? ( $l['department'] ?? '' ) ) . '</td>'
+                        . '<td style="padding:6px 10px;border-bottom:1px solid #eee">' . esc_html( $l['summary'] ?? '' ) . '</td>'
+                        . '</tr>';
+                }
+            }
+            return '<h3 style="color:#007878;margin:18px 0 6px">' . $title . ' (' . count( $set ) . ')</h3>'
+                . '<table style="border-collapse:collapse;width:100%;font-size:13px"><tr style="background:#f0fafa">'
+                . '<th style="padding:6px 10px;text-align:right">זמן</th><th style="padding:6px 10px;text-align:right">שם</th>'
+                . '<th style="padding:6px 10px;text-align:right">טלפון</th><th style="padding:6px 10px;text-align:right">התעניינות</th>'
+                . '<th style="padding:6px 10px;text-align:right">סיכום</th></tr>' . $rows . '</table>';
+        };
+
+        $subject = sprintf( 'דוח לידים %s — %d לידים חדשים', $period_he, count( $recent ) );
+        $body = '<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">'
+            . '<h2 style="color:#00A3A3">דוח לידים ' . $period_he . '</h2>'
+            . '<p>סה״כ <strong>' . count( $recent ) . '</strong> לידים חדשים · 🎯 שיווקי: ' . count( $mkt ) . ' · 💼 דרושים: ' . count( $jobs ) . '</p>'
+            . $section( '🎯 פניות שיווקיות', array_values( $mkt ) )
+            . $section( '💼 מחפשי עבודה', array_values( $jobs ) )
+            . '<hr><p style="color:#888;font-size:12px">דוח אוטומטי · ' . esc_html( current_time( 'mysql' ) ) . '</p></div>';
+
+        // CSV attachment for the period
+        $lbl = [ 'marketing' => 'שיווקי', 'job' => 'דרושים' ];
+        $csv = "שם,טלפון,אימייל,סוג,התעניינות,מחלקה,מקור,קמפיין,הסכמה,סטטוס CRM,תאריך\n";
+        foreach ( $recent as $l ) {
+            $csv .= '"' . implode( '","', array_map( fn( $v ) => str_replace( '"', '""', (string) $v ), [
+                $l['name'] ?? '', $l['phone'] ?? '', $l['email'] ?? '',
+                $lbl[ $l['lead_type'] ?? 'marketing' ] ?? 'שיווקי',
+                $l['interest'] ?? '', $l['department'] ?? '', $l['source'] ?? '', $l['campaign'] ?? '',
+                ! empty( $l['marketing_consent'] ) ? 'כן' : 'לא', $l['logicare'] ?? '', $l['time'] ?? '',
+            ] ) ) . "\"\n";
+        }
+        $attachments = [];
+        $up = wp_upload_dir();
+        $file = trailingslashit( $up['basedir'] ) . 'wisply-leads-' . $period . '-' . date( 'Ymd-His' ) . '.csv';
+        if ( wp_mkdir_p( $up['basedir'] ) && false !== file_put_contents( $file, "\xEF\xBB\xBF" . $csv ) ) {
+            $attachments[] = $file;
+        }
+
+        wp_mail( $to, $subject, $body, [ 'Content-Type: text/html; charset=UTF-8' ], $attachments );
+        if ( ! empty( $attachments ) ) { @unlink( $file ); }
     }
 
     public function cleanup_old_conversations(): void {

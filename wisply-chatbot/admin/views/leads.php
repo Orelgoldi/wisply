@@ -20,20 +20,29 @@ if ( isset( $_POST['wisply_dellead_nonce'] ) && check_admin_referer( 'wisply_del
     }
 }
 
-$leads      = array_reverse( (array) get_option( 'wisply_leads', [] ) ); // newest first
-$total      = count( $leads );
+$leads_all  = array_reverse( (array) get_option( 'wisply_leads', [] ) ); // newest first
 $lead_email = get_option( 'wisply_lead_email' ) ?: get_option( 'admin_email' );
 $base       = admin_url( 'admin.php?page=wisply-leads' );
 
-// CSV export
+// Filter by type (marketing / job) — applies to both the list and the export
+$type_filter = in_array( $_GET['type'] ?? '', [ 'marketing', 'job' ], true ) ? $_GET['type'] : '';
+$type_labels = [ 'marketing' => 'שיווקי', 'job' => 'דרושים' ];
+$leads = $type_filter === '' ? $leads_all : array_values( array_filter(
+    $leads_all, fn( $l ) => ( $l['lead_type'] ?? 'marketing' ) === $type_filter
+) );
+$total = count( $leads );
+
+// CSV export (respects the current type filter)
 if ( isset( $_GET['export'] ) && current_user_can( 'manage_options' ) ) {
+    $suffix = $type_filter ? '-' . $type_filter : '';
     header( 'Content-Type: text/csv; charset=UTF-8' );
-    header( 'Content-Disposition: attachment; filename="wisply-leads-' . date( 'Y-m-d' ) . '.csv"' );
+    header( 'Content-Disposition: attachment; filename="wisply-leads' . $suffix . '-' . date( 'Y-m-d' ) . '.csv"' );
     echo "\xEF\xBB\xBF";
-    echo "שם,טלפון,אימייל,התעניינות,סיכום שיחה,מחלקה,מקור,קמפיין,דף נחיתה,הסכמה שיווקית,גרסת הסכמה,זמן הסכמה,סטטוס,Logicare,אורך שיחה,הקשר מלא,שפה,תאריך,עמוד\n";
+    echo "שם,טלפון,אימייל,סוג,התעניינות,סיכום שיחה,מחלקה,מקור,קמפיין,דף נחיתה,הסכמה שיווקית,גרסת הסכמה,זמן הסכמה,סטטוס,Logicare,אורך שיחה,הקשר מלא,שפה,תאריך,עמוד\n";
     foreach ( $leads as $l ) {
         echo '"' . implode( '","', array_map( fn( $v ) => str_replace( '"', '""', (string) ( $v ?? '' ) ), [
             $l['name'] ?? '', $l['phone'] ?? '', $l['email'] ?? '',
+            $type_labels[ $l['lead_type'] ?? 'marketing' ] ?? 'שיווקי',
             $l['interest'] ?? '', $l['summary'] ?? '', $l['department'] ?? '',
             $l['source'] ?? '', $l['campaign'] ?? '', $l['landing_page'] ?? '',
             ! empty( $l['marketing_consent'] ) ? 'כן' : 'לא',
@@ -67,11 +76,24 @@ if ( isset( $_GET['export'] ) && current_user_can( 'manage_options' ) ) {
     foreach ( $leads as $l ) { if ( ! empty( $l['marketing_consent'] ) ) $consented++; }
     $opt_rate = $total ? round( $consented / $total * 100 ) : 0;
     ?>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <strong><?php echo $total; ?> לידים</strong>
+    <?php
+    // Counts per type (from the full set, so tab counts stay stable)
+    $n_all = count( $leads_all );
+    $n_job = count( array_filter( $leads_all, fn( $l ) => ( $l['lead_type'] ?? 'marketing' ) === 'job' ) );
+    $n_mkt = $n_all - $n_job;
+    $tabs = [ '' => "הכל ($n_all)", 'marketing' => "🎯 שיווקי ($n_mkt)", 'job' => "💼 דרושים ($n_job)" ];
+    ?>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <?php foreach ( $tabs as $key => $label ) :
+            $url = $key === '' ? remove_query_arg( 'type', $base ) : add_query_arg( 'type', $key, $base );
+            $on  = ( $type_filter === $key );
+            ?>
+            <a href="<?php echo esc_url( $url ); ?>" class="button <?php echo $on ? 'button-primary' : ''; ?>"><?php echo esc_html( $label ); ?></a>
+        <?php endforeach; ?>
+        <span style="width:1px;height:24px;background:#ddd;margin:0 4px"></span>
         <?php if ( $total ) : ?>
             <span style="background:#e9f8ef;color:#0a8f3c;padding:4px 12px;border-radius:999px;font-weight:600">Opt-In: <?php echo $opt_rate; ?>% (<?php echo $consented; ?>)</span>
-            <a href="<?php echo esc_url( add_query_arg( 'export', 1, $base ) ); ?>" class="button">⬇ ייצוא CSV</a>
+            <a href="<?php echo esc_url( add_query_arg( 'export', 1, $type_filter ? add_query_arg( 'type', $type_filter, $base ) : $base ) ); ?>" class="button">⬇ ייצוא CSV<?php echo $type_filter ? ' (' . esc_html( $type_labels[ $type_filter ] ) . ')' : ''; ?></a>
         <?php endif; ?>
     </div>
 
@@ -91,7 +113,10 @@ if ( isset( $_GET['export'] ) && current_user_can( 'manage_options' ) ) {
                 ?>
                 <tr>
                     <td style="white-space:nowrap"><?php echo esc_html( $l['time'] ?? '' ); ?></td>
-                    <td><strong><?php echo esc_html( $l['name'] ?? '' ); ?></strong></td>
+                    <td><strong><?php echo esc_html( $l['name'] ?? '' ); ?></strong>
+                        <?php $lt = $l['lead_type'] ?? 'marketing'; ?>
+                        <br><span style="font-size:11px;padding:1px 7px;border-radius:6px;<?php echo $lt === 'job' ? 'background:#eef2ff;color:#4338ca' : 'background:#E0F5F5;color:#007878'; ?>"><?php echo $lt === 'job' ? '💼 דרושים' : '🎯 שיווקי'; ?></span>
+                    </td>
                     <td><a href="tel:<?php echo esc_attr( preg_replace( '/[^\d+]/', '', $l['phone'] ?? '' ) ); ?>"><?php echo esc_html( $l['phone'] ?? '' ); ?></a></td>
                     <td><?php echo $l['email'] ? '<a href="mailto:' . esc_attr( $l['email'] ) . '">' . esc_html( $l['email'] ) . '</a>' : '—'; ?></td>
                     <td style="max-width:420px">
