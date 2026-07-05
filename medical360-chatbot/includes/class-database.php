@@ -173,9 +173,9 @@ class M360_Database {
             'emergency_eran_url'  => 'https://www.eran.org.il/',
             'emergency_sahar_url' => 'https://sahar.org.il/',
             // Logicare CRM integration — push captured leads to the CRM
-            'logicare_enabled'   => '0',
-            'logicare_base_url'  => '',   // e.g. https://app.logicare.co.il (no trailing slash)
-            'logicare_api_key'   => '',   // company UUID (stored encrypted)
+            'logicare_enabled'   => '1',
+            'logicare_base_url'  => 'https://logicare.puzzlesoft.co.il',  // Paz Medical Care instance
+            'logicare_api_key'   => '',   // company UUID — paste in admin (stored encrypted; kept out of code/git)
         ];
         foreach ( $defaults as $key => $value ) {
             $this->set_setting( $key, $value, false );
