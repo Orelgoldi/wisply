@@ -271,6 +271,19 @@ class Wisply_AI_Handler {
                 . "הוסף בסוף התשובה את הסמן [ACTION:key] עם המפתח המתאים (לדוגמה [ACTION:" . array_key_first( $actions ) . "]). הוסף סמן אחד בלבד, ורק כשזה באמת רלוונטי.";
         }
 
+        // Job-seeker flow: a *specific* role interest → jobs page + lead form together.
+        // Active only when a 'jobs' (careers) action button is configured.
+        $jobs_block = '';
+        if ( isset( $actions['jobs'] ) ) {
+            $jobs_block = "\n\nטיפול בפניות דרושים/קריירה (תקף בכל שפה — עברית/אנגלית/רוסית):\n"
+                . "• אם הפונה מחפש עבודה ומציין תפקיד / תחום / משרה ספציפיים שמעניינים אותו "
+                . "(למשל \"אני מחפש עבודה כפיזיותרפיסט\", \"יש משרה לאחות?\", \"I'm a nurse looking for a job\", \"ищу работу медсестрой\") — "
+                . "בצע את שני הדברים **באותה תשובה**: (א) הוסף [ACTION:jobs] כדי להפנות אותו לדף הדרושים; "
+                . "(ב) הצע לו בחום להשאיר פרטים כדי שצוות הגיוס יחזור אליו לגבי אותה משרה, והוסף בסוף [ASK_LEAD].\n"
+                . "• אם הפונה רק שואל בכלליות \"יש דרושים?\" בלי לציין תפקיד — הוסף [ACTION:jobs] ושאל אותו איזה תחום/תפקיד מעניין אותו (עדיין בלי טופס).\n"
+                . "• במקרה הזה מותר לשלב [ACTION:jobs] יחד עם [ASK_LEAD] באותה תשובה (זהו החריג לכלל \"סמן אחד בלבד\").";
+        }
+
         return <<<PROMPT
 אתה "$bot", העוזר החכם של $business$type_suffix.
 ענה לגולשים על שאלות הקשורות ל-$business, בהתבסס אך ורק על תוכן האתר שמופיע למטה.$desc_block
@@ -303,6 +316,7 @@ class Wisply_AI_Handler {
 - הוסף לכל היותר סמן אחד מסוג [OPTIONS]/[ASK_LEAD]/[SHOW_LEAD_FORM] בכל תשובה.
 $emergency_block
 $action_block
+$jobs_block
 $context_block
 PROMPT;
     }

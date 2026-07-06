@@ -3,6 +3,13 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [2.2.1] — 2026-07-06
+### Added
+- **Smart job-seeker flow** — when a visitor names a *specific* role/position they're
+  after (any language — HE/EN/RU), the bot does both in one reply: links to the careers
+  page (`[ACTION:jobs]`) **and** offers to leave details for a call-back (`[ASK_LEAD]` →
+  lead form). Active when a `jobs` action button is configured. Lead is auto-tagged `job`.
+
 ## [2.2.0] — 2026-07-05
 ### Added
 - **Lead classification (marketing vs. job-seeker)** — every inquiry is auto-tagged

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>סיכום פרויקט — העוזר החכם | Medical360</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f7f7;font-family:'Segoe UI',Arial,sans-serif;color:#1f2937">
+<div style="max-width:680px;margin:0 auto;padding:24px 16px">
+
+  <!-- Header -->
+  <div style="background:linear-gradient(135deg,#00A3A3,#007878);border-radius:16px;padding:32px 28px;color:#fff">
+    <div style="font-size:13px;letter-spacing:1px;opacity:.9">MEDICAL360 · העוזר החכם</div>
+    <h1 style="margin:8px 0 4px;font-size:26px">סיכום פרויקט — מה נבנה ומה קיים בתוסף</h1>
+    <div style="opacity:.9;font-size:14px">צ׳אט AI חכם לאתר, כולל קול, לידים, CRM ודוחות אוטומטיים</div>
+  </div>
+
+  <!-- Intro -->
+  <div style="background:#fff;border-radius:14px;padding:24px 26px;margin-top:16px;line-height:1.8;font-size:15px">
+    <p style="margin-top:0">שלום רב,</p>
+    <p>לפניכם סיכום מפורט של העוזר החכם (הצ׳אטבוט) שהוטמע באתר. מדובר במערכת מלאה
+       הפועלת ישירות בתוך וורדפרס — עונה לגולשים בעברית, אנגלית ורוסית על בסיס
+       <strong>תוכן האתר בלבד</strong>, לוכדת פניות ולידים, מסנכרנת אותם ל-CRM,
+       ושולחת לכם דוחות אוטומטיים. כל ההגדרות נשלטות מלוח ניהול נוח בתוך וורדפרס.</p>
+  </div>
+
+  <!-- Section: core chat -->
+  <div style="background:#fff;border-radius:14px;padding:22px 26px;margin-top:14px;line-height:1.75;font-size:15px">
+    <h2 style="color:#007878;font-size:19px;margin:0 0 10px">🤖 מנוע השיחה (AI)</h2>
+    <ul style="margin:0;padding-inline-start:20px">
+      <li>מענה חכם בשלוש שפות (עברית / אנגלית / רוסית) עם זיהוי שפה אוטומטי.</li>
+      <li>התשובות מבוססות <strong>אך ורק על תוכן האתר</strong> — מנוע אינדוקס סורק
+          את הדפים ומעדכן את בסיס הידע אוטומטית מדי יום.</li>
+      <li>בחירת ספק בינה: Claude (Anthropic) או OpenAI, כולל בחירת מודל.</li>
+      <li>הווידג׳ט פועל ב-Shadow DOM — עיצוב מבודד לחלוטין, לא "נשבר" מול תבנית האתר.</li>
+    </ul>
+  </div>
+
+  <!-- Section: voice -->
+  <div style="background:#fff;border-radius:14px;padding:22px 26px;margin-top:14px;line-height:1.75;font-size:15px">
+    <h2 style="color:#007878;font-size:19px;margin:0 0 10px">🎙️ שיחת קול (Voice)</h2>
+    <ul style="margin:0;padding-inline-start:20px">
+      <li>הקראת תשובות (TTS) והבנת דיבור (STT) — הגולש יכול לדבר עם הבוט.</li>
+      <li>שיחת קול בזמן אמת (OpenAI Realtime) עם fallback אוטומטי לזרימה הרגילה.</li>
+      <li>שליטה במצב התמלול (ללא / שמירה בסיום / תמלול חי) ובבחירת קול, כולל
+          כפתור <strong>האזנה מקדימה</strong> לכל קול בהגדרות.</li>
+    </ul>
+  </div>
+
+  <!-- Section: leads -->
+  <div style="background:#fff;border-radius:14px;padding:22px 26px;margin-top:14px;line-height:1.75;font-size:15px">
+    <h2 style="color:#007878;font-size:19px;margin:0 0 10px">📥 לכידת לידים ופניות</h2>
+    <ul style="margin:0;padding-inline-start:20px">
+      <li><strong>זרימת לידים מונחית</strong> — כפתורי בחירה, שאלת הסכמה ואז טופס,
+          במקום לקפוץ עם טופס באופן מיידי.</li>
+      <li><strong>סיכום שיחה אוטומטי ב-AI</strong> — לכל ליד נשמר סיכום של מה הגולש חיפש.</li>
+      <li><strong>מנוע הקשר (Context)</strong> — נלכדים מקור ההגעה, קמפיין (UTM),
+          דף הנחיתה והמחלקה, ומצורפים לכל ליד.</li>
+      <li><strong>הסכמה שיווקית (Opt-In)</strong> — צ׳קבוקס חובה עם טקסט/גרסה הניתנים
+          לעריכה; נשמרים הסכמה + חותמת זמן + גרסה לכל ליד (עמידה בדרישות החוק).</li>
+      <li><strong>התראת חירום</strong> — במצבי מצוקה הבוט עוצר ומציג הודעה + כפתורי
+          פעולה (101, ער"ן, סה"ר) — הכל ניתן לעריכה.</li>
+      <li>התראת מייל על כל ליד חדש + ייצוא כל הלידים ל-Excel/CSV.</li>
+    </ul>
+  </div>
+
+  <!-- Section: NEW - highlighted -->
+  <div style="background:#f0fafa;border:2px solid #00A3A3;border-radius:14px;padding:22px 26px;margin-top:14px;line-height:1.75;font-size:15px">
+    <div style="display:inline-block;background:#00A3A3;color:#fff;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;margin-bottom:10px">חדש בגרסה זו</div>
+    <h2 style="color:#007878;font-size:19px;margin:0 0 10px">🎯 סיווג פניות + דוחות אוטומטיים</h2>
+    <ul style="margin:0;padding-inline-start:20px">
+      <li><strong>סיווג אוטומטי של כל פנייה</strong> — המערכת מזהה אם מדובר בפנייה
+          <strong>שיווקית</strong> או ב<strong>חיפוש עבודה / דרושים</strong> (זיהוי מילות
+          מפתח בעברית, אנגלית ורוסית).</li>
+      <li>במסך הלידים נוספו <strong>לשוניות סינון</strong> (הכל / 🎯 שיווקי / 💼 דרושים)
+          עם ספירה חיה, תגית סוג לכל ליד, ו<strong>ייצוא Excel נפרד לכל סוג</strong>.</li>
+      <li><strong>דוחות אוטומטיים במייל</strong> — דוח <strong>יומי</strong> (כל בוקר)
+          ודוח <strong>שבועי</strong> (יום ב׳), המחולקים לשיווקי/דרושים, עם קובץ Excel מצורף.</li>
+      <li>אזור הגדרות ייעודי להזנת <strong>כתובות המייל</strong> לקבלת הדוחות והפעלה/כיבוי
+          של הדוח היומי והשבועי.</li>
+    </ul>
+  </div>
+
+  <!-- Section: CRM -->
+  <div style="background:#fff;border-radius:14px;padding:22px 26px;margin-top:14px;line-height:1.75;font-size:15px">
+    <h2 style="color:#007878;font-size:19px;margin:0 0 10px">🔗 חיבור ל-CRM (Logicare)</h2>
+    <ul style="margin:0;padding-inline-start:20px">
+      <li>כל ליד שנלכד נשלח <strong>אוטומטית ל-Logicare</strong> בנוסף למייל וללוח הניהול —
+          כולל שם, טלפון, אימייל, סיכום השיחה, תחום עניין, מקור וקמפיין.</li>
+      <li>מפתח ה-API נשמר <strong>מוצפן</strong> במסד הנתונים (לא בקוד), עם כלי בדיקת
+          חיבור שמאמת את המפתח ומציג את שם החברה.</li>
+      <li>סטטוס סנכרון (✓/✗) מוצג לכל ליד בטבלה וב-CSV.</li>
+    </ul>
+  </div>
+
+  <!-- Section: proactive + dashboard -->
+  <div style="background:#fff;border-radius:14px;padding:22px 26px;margin-top:14px;line-height:1.75;font-size:15px">
+    <h2 style="color:#007878;font-size:19px;margin:0 0 10px">🔔 פנייה יזומה + 📊 דשבורד</h2>
+    <ul style="margin:0;padding-inline-start:20px">
+      <li><strong>בועית פנייה יזומה</strong> — כשהגולש גולל לאמצע הדף, קופצת הודעה
+          מותאמת-דף עם 4 שאלות מוצעות שנוצרות אוטומטית לפי תוכן הדף.</li>
+      <li><strong>לוח בקרה (Analytics)</strong> — שיחות, לידים, אחוז המרה, אחוז הסכמה,
+          שיחות נטושות, שאלות מובילות ומחלקות מובילות.</li>
+    </ul>
+  </div>
+
+  <!-- Section: fixes / tabs -->
+  <div style="background:#fff;border-radius:14px;padding:22px 26px;margin-top:14px;line-height:1.75;font-size:15px">
+    <h2 style="color:#007878;font-size:19px;margin:0 0 10px">⚙️ הגדרות בלשוניות + חיזוק יציבות</h2>
+    <ul style="margin:0;padding-inline-start:20px">
+      <li>מסך ההגדרות הארוך אורגן מחדש ל<strong>לשוניות במסך אחד</strong>
+          (AI · קול · בועית יזומה · לידים ו-CRM · עיצוב ותוכן · מתקדם) — הלשונית
+          הפעילה נזכרת אוטומטית.</li>
+      <li><strong>תיקון תקלת הצגת הגדרות</strong> — כל הערכים והתפריטים הנפתחים
+          נטענים כעת ישירות ממסד הנתונים, כך שההגדרות השמורות תמיד מוצגות נכון
+          ולא "חוזרות" לברירת המחדל.</li>
+      <li>חיזוק שמירה: שמירה תקינה של טקסטים רב-שורתיים, צ׳קבוקסים ותווים מיוחדים.</li>
+    </ul>
+  </div>
+
+  <!-- Closing -->
+  <div style="background:#fff;border-radius:14px;padding:22px 26px;margin-top:14px;line-height:1.8;font-size:15px">
+    <p style="margin-top:0">כל היכולות מנוהלות מתוך וורדפרס, ללא צורך בידע טכני. נשמח
+       ללוות אתכם בהטמעה, בכיוונון הטקסטים והעיצוב, ובחיבור המערכות.</p>
+    <p style="margin-bottom:0">בברכה,<br><strong>Orel Goldstein Studio</strong></p>
+  </div>
+
+  <div style="text-align:center;color:#9ca3af;font-size:12px;margin-top:18px">
+    Medical360 AI Chatbot · גרסה 4.4.0
+  </div>
+
+</div>
+</body>
+</html>
