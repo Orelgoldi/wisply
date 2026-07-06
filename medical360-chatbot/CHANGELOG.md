@@ -3,6 +3,15 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [4.5.0] — 2026-07-06
+### Added
+- **Desktop auto-open (call-to-action)** — optional setting that automatically opens
+  the full chat window on desktop after a configurable delay, with an editable opening
+  message per language (HE/EN/RU). Desktop-only (not mobile), fires once per session,
+  and respects the visitor (won't reopen if they've closed it or started typing).
+  Settings: enable checkbox + delay (seconds) + 3 message fields, under the
+  "בועית יזומה" tab.
+
 ## [4.4.1] — 2026-07-06
 ### Added
 - **Smart job-seeker flow** — when a visitor names a *specific* role/position they're

@@ -167,6 +167,8 @@ class M360_Admin {
             'voice_enabled', 'voice_provider', 'tts_model', 'tts_voice', 'stt_model',
             'realtime_enabled', 'realtime_model', 'voice_text_mode',
             'proactive_enabled', 'proactive_delay', 'proactive_msg_he', 'proactive_msg_en', 'proactive_msg_ru',
+            'desktop_autoopen_enabled', 'desktop_autoopen_delay',
+            'desktop_autoopen_msg_he', 'desktop_autoopen_msg_en', 'desktop_autoopen_msg_ru',
             'consent_required', 'consent_version', 'consent_text_he', 'consent_text_en', 'consent_text_ru',
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',

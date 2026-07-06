@@ -25,6 +25,8 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
             'voice_enabled', 'voice_provider', 'tts_model', 'tts_voice', 'stt_model',
             'realtime_enabled', 'realtime_model', 'voice_text_mode',
             'proactive_enabled', 'proactive_delay', 'proactive_msg_he', 'proactive_msg_en', 'proactive_msg_ru',
+            'desktop_autoopen_enabled', 'desktop_autoopen_delay',
+            'desktop_autoopen_msg_he', 'desktop_autoopen_msg_en', 'desktop_autoopen_msg_ru',
             'consent_required', 'consent_version', 'consent_text_he', 'consent_text_en', 'consent_text_ru',
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
@@ -35,12 +37,14 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
         $textarea_keys = [
             'business_description', 'greeting_he', 'greeting_en', 'greeting_ru',
             'suggested_questions_he', 'suggested_questions_en', 'suggested_questions_ru',
+            'desktop_autoopen_msg_he', 'desktop_autoopen_msg_en', 'desktop_autoopen_msg_ru',
             'report_recipients',
         ];
         // Checkboxes don't POST when unchecked — normalise to 0/1
         $_POST['voice_enabled']     = isset( $_POST['voice_enabled'] )     ? '1' : '0';
         $_POST['realtime_enabled']  = isset( $_POST['realtime_enabled'] )  ? '1' : '0';
         $_POST['proactive_enabled'] = isset( $_POST['proactive_enabled'] ) ? '1' : '0';
+        $_POST['desktop_autoopen_enabled'] = isset( $_POST['desktop_autoopen_enabled'] ) ? '1' : '0';
         $_POST['consent_required']  = isset( $_POST['consent_required'] )  ? '1' : '0';
         $_POST['logicare_enabled']  = isset( $_POST['logicare_enabled'] )  ? '1' : '0';
         $_POST['report_daily']      = isset( $_POST['report_daily'] )      ? '1' : '0';
@@ -378,6 +382,40 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
             <tr>
                 <th>הודעה — Русский</th>
                 <td><input type="text" name="proactive_msg_ru" class="large-text" value="<?php echo wisply_v('proactive_msg_ru'); ?>"></td>
+            </tr>
+        </table>
+
+        <h2>🖥️ פתיחה אוטומטית בדסקטופ</h2>
+        <table class="form-table">
+            <tr>
+                <th>הפעלה</th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="desktop_autoopen_enabled" value="1"
+                               <?php checked( ( $settings['desktop_autoopen_enabled'] ?? '0' ), '1' ); ?>>
+                        פתח את חלון הצ׳אט אוטומטית במחשב (דסקטופ) כדי להניע לפעולה
+                    </label>
+                    <p class="description">רק במסך רחב (דסקטופ, לא בנייד), פעם אחת לכל גלישה — אם הגולש סוגר, זה לא ייפתח שוב באותה גלישה.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>השהיה לפני פתיחה</th>
+                <td>
+                    <input type="number" name="desktop_autoopen_delay" min="0" max="120"
+                           value="<?php echo wisply_v('desktop_autoopen_delay','3'); ?>" class="small-text"> שניות
+                </td>
+            </tr>
+            <tr>
+                <th>הודעת פתיחה — עברית</th>
+                <td><input type="text" name="desktop_autoopen_msg_he" class="large-text" value="<?php echo wisply_v('desktop_autoopen_msg_he'); ?>"></td>
+            </tr>
+            <tr>
+                <th>הודעת פתיחה — English</th>
+                <td><input type="text" name="desktop_autoopen_msg_en" class="large-text" value="<?php echo wisply_v('desktop_autoopen_msg_en'); ?>"></td>
+            </tr>
+            <tr>
+                <th>הודעת פתיחה — Русский</th>
+                <td><input type="text" name="desktop_autoopen_msg_ru" class="large-text" value="<?php echo wisply_v('desktop_autoopen_msg_ru'); ?>"></td>
             </tr>
         </table>
 

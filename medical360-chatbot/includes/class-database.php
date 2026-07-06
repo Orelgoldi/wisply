@@ -161,6 +161,12 @@ class M360_Database {
             'proactive_msg_he'  => 'היי 👋 אשמח לתת לך עוד פרטים על {subject}. יש לך שאלה?',
             'proactive_msg_en'  => 'Hi 👋 Happy to tell you more about {subject}. Any questions?',
             'proactive_msg_ru'  => 'Здравствуйте 👋 Расскажу подробнее о {subject}. Есть вопросы?',
+            // Desktop auto-open — open the full chat window automatically on desktop (call-to-action)
+            'desktop_autoopen_enabled' => '0',
+            'desktop_autoopen_delay'   => '3',   // seconds before the window opens
+            'desktop_autoopen_msg_he'  => 'היי 👋 בואו לדבר עם העוזר החכם של מדיקל — אני כאן לכל שאלה!',
+            'desktop_autoopen_msg_en'  => 'Hi 👋 Come chat with Medical\'s smart assistant — I\'m here for any question!',
+            'desktop_autoopen_msg_ru'  => 'Здравствуйте 👋 Поговорите с умным ассистентом Medical — я здесь для любого вопроса!',
             // Marketing consent (Opt-In) — legal requirement before saving a marketing lead
             'consent_required'  => '1',
             'consent_version'   => '1.0',
@@ -418,6 +424,8 @@ class M360_Database {
             'voice_enabled', 'voice_provider', 'realtime_enabled', 'voice_text_mode',
             'proactive_enabled', 'proactive_delay',
             'proactive_msg_he', 'proactive_msg_en', 'proactive_msg_ru',
+            'desktop_autoopen_enabled', 'desktop_autoopen_delay',
+            'desktop_autoopen_msg_he', 'desktop_autoopen_msg_en', 'desktop_autoopen_msg_ru',
             'consent_required', 'consent_version',
             'consent_text_he', 'consent_text_en', 'consent_text_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',

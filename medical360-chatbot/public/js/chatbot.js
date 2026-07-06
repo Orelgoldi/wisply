@@ -283,6 +283,12 @@
      more info — to spark interaction. Shows once per page, per session. */
   const PROACTIVE_ON  = (S.proactive_enabled ?? '1') !== '0';
   const PROACTIVE_MS  = Math.max(1, parseInt(S.proactive_delay || '5', 10)) * 1000;
+
+  /* ── Desktop auto-open (call-to-action): open the full window automatically ── */
+  const IS_DESKTOP    = window.matchMedia('(min-width: 768px)').matches;
+  const AUTOOPEN_ON   = IS_DESKTOP && (S.desktop_autoopen_enabled ?? '0') === '1';
+  const AUTOOPEN_MS   = Math.max(0, parseInt(S.desktop_autoopen_delay || '3', 10)) * 1000;
+  function autoOpenMessage() { return S['desktop_autoopen_msg_' + lang] || S.desktop_autoopen_msg_he || ''; }
   let pageTitle = '';
   let department = '';
   let pageQuestions = [];   // AI-generated questions about the current page
@@ -408,6 +414,16 @@
     show();
   }
 
+  /* ── Desktop auto-open trigger — fire once per session, only if untouched ── */
+  function setupAutoOpen() {
+    if (sessionStorage.getItem('m360_autoopened')) return;   // don't nag on every page
+    setTimeout(() => {
+      if (isOpen || hadActivity) return;                     // respect the visitor
+      sessionStorage.setItem('m360_autoopened', '1');
+      show(false);                                           // open without stealing focus/keyboard
+    }, AUTOOPEN_MS);
+  }
+
   function close() {
     isOpen = false;
     stopListen();
@@ -420,6 +436,11 @@
 
   /* ── Greeting + suggestions ── */
   function greeting() {
+    // Desktop auto-open call-to-action greeting takes precedence when enabled
+    if (AUTOOPEN_ON) {
+      const am = autoOpenMessage();
+      if (am) { botMsg(am, []); showSuggestions(); return; }
+    }
     // On a specific page (with proactive on), open with the contextual offer
     if (pageTitle && PROACTIVE_ON) {
       const msg = proactiveMessage();
@@ -1522,6 +1543,9 @@
 
     // Proactive bubble — pops when the visitor scrolls to the middle of the page
     if (PROACTIVE_ON) setupTeaserTrigger();
+
+    // Desktop auto-open — opens the whole window automatically as a call-to-action
+    if (AUTOOPEN_ON) setupAutoOpen();
   }
 
   document.readyState === 'loading'
