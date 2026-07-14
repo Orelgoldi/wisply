@@ -184,6 +184,23 @@ class M360_Database {
             'logicare_enabled'   => '1',
             'logicare_base_url'  => 'https://logicare.puzzlesoft.co.il',  // Paz Medical Care instance
             'logicare_api_key'   => '',   // company UUID — paste in admin (stored encrypted; kept out of code/git)
+            // Logicare lead routing — map each page to the right branch (סניף) + department (מחלקה)
+            'logicare_default_branch' => 'מדיקל קר - בית חולים',
+            'logicare_job_branch'     => 'מדיקל קר - בית חולים',
+            'logicare_job_department' => 'דרושים',
+            'logicare_routing_rules'  => "# ניתוב לידים לסניף+מחלקה בלוגיקר לפי הדף. פורמט לכל שורה: מילת מפתח בדף | סניף | מחלקה\n"
+                . "גריאטרי | מדיקל קר - בית חולים | שיקום גריאטרי\n"
+                . "סיעוד מורכב | מדיקל קר - בית חולים | סיעודי מורכב א'\n"
+                . "שיקום יום | מדיקל קר - בית חולים | שיקום יום\n"
+                . "החלמה | מדיקל קר - בית חולים | החלמה\n"
+                . "פארא רפואי | מדיקל קר - בית חולים | פארא רפואי\n"
+                . "אינטגרטיבי | מדיקל קר - בית חולים | מרכז אינטגרטיבי\n"
+                . "חוסן | מדיקל קר - בית חולים | מרכז אינטגרטיבי\n"
+                . "פסיכולוגית | מדיקל קר - בית חולים | מרכז אינטגרטיבי\n"
+                . "מתחילים מחדש | בית פז סדנאות | חיילים\n"
+                . "חיילים | בית פז סדנאות | חיילים\n"
+                . "שיקום כללי | מדיקל קר - בית חולים | מחלקות אשפוז\n"
+                . "צעירים | מדיקל קר - בית חולים | מחלקות אשפוז",
             // Scheduled leads reports (daily + weekly digests)
             'report_recipients'  => '',   // comma / newline separated emails
             'report_daily'       => '1',

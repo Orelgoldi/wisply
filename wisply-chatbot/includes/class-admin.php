@@ -173,10 +173,9 @@ class Wisply_Admin {
             'consent_required', 'consent_version', 'consent_text_he', 'consent_text_en', 'consent_text_ru',
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
-            'logicare_enabled', 'logicare_base_url', 'logicare_api_key',
             'report_recipients', 'report_daily', 'report_weekly',
         ];
-        $secret_keys = [ 'ai_api_key', 'openai_api_key', 'logicare_api_key' ];
+        $secret_keys = [ 'ai_api_key', 'openai_api_key' ];
         $errors      = [];
 
         $params = $_POST;
@@ -273,11 +272,6 @@ class Wisply_Admin {
                 ? 'זמין — דיבור מיידי אפשרי 🎉'
                 : ( 'לא זמין: ' . ( $rt['error'] ?? 'אין גישה' ) . ' — לכן הקול עובר למצב "כותב ואז מדבר"' ),
         ];
-
-        // Logicare CRM (only when enabled)
-        if ( $db->get_setting( 'logicare_enabled', '0' ) === '1' ) {
-            $out['logicare'] = Wisply_Chatbot_API::get_instance()->logicare_test();
-        }
 
         // Current saved values (so you can confirm what's actually active)
         $out['values'] = [

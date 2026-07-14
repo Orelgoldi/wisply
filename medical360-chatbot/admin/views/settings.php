@@ -27,6 +27,7 @@ if ( isset( $_POST['m360_settings_nonce'] ) ) {
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'logicare_enabled', 'logicare_base_url', 'logicare_api_key',
+            'logicare_default_branch', 'logicare_job_branch', 'logicare_job_department', 'logicare_routing_rules',
             'report_recipients', 'report_daily', 'report_weekly',
         ];
         // Checkboxes don't POST when unchecked — normalise to 0/1
@@ -46,6 +47,7 @@ if ( isset( $_POST['m360_settings_nonce'] ) ) {
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'proactive_msg_he', 'proactive_msg_en', 'proactive_msg_ru',
             'desktop_autoopen_msg_he', 'desktop_autoopen_msg_en', 'desktop_autoopen_msg_ru',
+            'logicare_routing_rules',
             'report_recipients',
         ];
         $db          = M360_Database::get_instance();
@@ -432,6 +434,36 @@ function m360_sel( string $key, string $val ): string {
                     <input type="password" name="logicare_api_key" class="regular-text" dir="ltr" autocomplete="new-password"
                            placeholder="<?php echo ! empty( $settings['logicare_api_key'] ) ? '✅ מפתח מוגדר — הכנס חדש להחלפה' : 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'; ?>">
                     <p class="description">ה-UUID של החברה ב-Logicare (נשמר מוצפן). נבדק בכפתור "בדוק מערכת" למעלה.</p>
+                </td>
+            </tr>
+        </table>
+
+        <h2>🧭 ניתוב לידים לסניף ומחלקה (Logicare)</h2>
+        <table class="form-table">
+            <tr>
+                <th>סניף ברירת מחדל</th>
+                <td>
+                    <input type="text" name="logicare_default_branch" class="regular-text" value="<?php echo m360_v('logicare_default_branch'); ?>">
+                    <p class="description">הסניף שאליו ינותב ליד אם אף כלל התאמה לא נמצא. חייב להיות זהה לשם הסניף ב-Logicare (השדה "הופנה לסניף").</p>
+                </td>
+            </tr>
+            <tr>
+                <th>ניתוב דרושים 💼</th>
+                <td>
+                    סניף: <input type="text" name="logicare_job_branch" class="regular-text" value="<?php echo m360_v('logicare_job_branch'); ?>"><br>
+                    מחלקה: <input type="text" name="logicare_job_department" class="regular-text" value="<?php echo m360_v('logicare_job_department'); ?>" style="margin-top:6px">
+                    <p class="description">כל פנייה שסווגה כ"חיפוש עבודה" תנותב לכאן — בלי קשר לדף שממנו הגיעה.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>כללי ניתוב לפי דף</th>
+                <td>
+                    <textarea name="logicare_routing_rules" rows="14" class="large-text" dir="rtl" style="font-family:monospace;line-height:1.7"><?php echo esc_textarea( $settings['logicare_routing_rules'] ?? '' ); ?></textarea>
+                    <p class="description">
+                        שורה לכל כלל, בפורמט: <code>מילת מפתח בדף | סניף | מחלקה</code>.
+                        הכלל הראשון שמילת המפתח שלו מופיעה בכותרת הדף/המחלקה — מנצח (סדרו כללים ספציפיים למעלה).
+                        שורה שמתחילה ב-<code>#</code> היא הערה. שמות הסניף והמחלקה חייבים להיות <strong>זהים בדיוק</strong> לשמות ב-Logicare.
+                    </p>
                 </td>
             </tr>
         </table>

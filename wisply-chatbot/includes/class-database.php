@@ -208,10 +208,6 @@ class Wisply_Database {
             'emergency_phone'     => '101',
             'emergency_eran_url'  => 'https://www.eran.org.il/',
             'emergency_sahar_url' => 'https://sahar.org.il/',
-            // Logicare CRM integration — push captured leads to the CRM
-            'logicare_enabled'   => '0',
-            'logicare_base_url'  => '',   // e.g. https://app.logicare.co.il (no trailing slash)
-            'logicare_api_key'   => '',   // company UUID (stored encrypted)
             // Automated leads reports (daily / weekly digest by email)
             'report_recipients'  => '',   // comma / newline separated emails
             'report_daily'       => '1',
@@ -312,13 +308,13 @@ class Wisply_Database {
 
         // CSV attachment for the period
         $lbl = [ 'marketing' => 'שיווקי', 'job' => 'דרושים' ];
-        $csv = "שם,טלפון,אימייל,סוג,התעניינות,מחלקה,מקור,קמפיין,הסכמה,סטטוס CRM,תאריך\n";
+        $csv = "שם,טלפון,אימייל,סוג,התעניינות,מחלקה,מקור,קמפיין,הסכמה,תאריך\n";
         foreach ( $recent as $l ) {
             $csv .= '"' . implode( '","', array_map( fn( $v ) => str_replace( '"', '""', (string) $v ), [
                 $l['name'] ?? '', $l['phone'] ?? '', $l['email'] ?? '',
                 $lbl[ $l['lead_type'] ?? 'marketing' ] ?? 'שיווקי',
                 $l['interest'] ?? '', $l['department'] ?? '', $l['source'] ?? '', $l['campaign'] ?? '',
-                ! empty( $l['marketing_consent'] ) ? 'כן' : 'לא', $l['logicare'] ?? '', $l['time'] ?? '',
+                ! empty( $l['marketing_consent'] ) ? 'כן' : 'לא', $l['time'] ?? '',
             ] ) ) . "\"\n";
         }
         $attachments = [];
@@ -354,7 +350,7 @@ class Wisply_Database {
     // ─── Settings ─────────────────────────────────────────────────────────────
 
     /** Fields that contain secrets and must be stored encrypted. */
-    private const ENCRYPTED_KEYS = [ 'ai_api_key', 'openai_api_key', 'logicare_api_key' ];
+    private const ENCRYPTED_KEYS = [ 'ai_api_key', 'openai_api_key' ];
 
     public function get_setting( string $key, mixed $default = null ): mixed {
         $table = $this->db->prefix . self::TABLE_SETTINGS;

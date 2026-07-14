@@ -38,7 +38,7 @@ if ( isset( $_GET['export'] ) && current_user_can( 'manage_options' ) ) {
     header( 'Content-Type: text/csv; charset=UTF-8' );
     header( 'Content-Disposition: attachment; filename="wisply-leads' . $suffix . '-' . date( 'Y-m-d' ) . '.csv"' );
     echo "\xEF\xBB\xBF";
-    echo "שם,טלפון,אימייל,סוג,התעניינות,סיכום שיחה,מחלקה,מקור,קמפיין,דף נחיתה,הסכמה שיווקית,גרסת הסכמה,זמן הסכמה,סטטוס,Logicare,אורך שיחה,הקשר מלא,שפה,תאריך,עמוד\n";
+    echo "שם,טלפון,אימייל,סוג,התעניינות,סיכום שיחה,מחלקה,מקור,קמפיין,דף נחיתה,הסכמה שיווקית,גרסת הסכמה,זמן הסכמה,סטטוס,אורך שיחה,הקשר מלא,שפה,תאריך,עמוד\n";
     foreach ( $leads as $l ) {
         echo '"' . implode( '","', array_map( fn( $v ) => str_replace( '"', '""', (string) ( $v ?? '' ) ), [
             $l['name'] ?? '', $l['phone'] ?? '', $l['email'] ?? '',
@@ -47,7 +47,7 @@ if ( isset( $_GET['export'] ) && current_user_can( 'manage_options' ) ) {
             $l['source'] ?? '', $l['campaign'] ?? '', $l['landing_page'] ?? '',
             ! empty( $l['marketing_consent'] ) ? 'כן' : 'לא',
             $l['consent_version'] ?? '', $l['consent_time'] ?? '',
-            $l['lead_status'] ?? '', $l['logicare'] ?? '',
+            $l['lead_status'] ?? '',
             $l['conversation_length'] ?? '',
             $l['context'] ?? '', $l['lang'] ?? '', $l['time'] ?? '', $l['page'] ?? '',
         ] ) ) . "\"\n";
@@ -147,13 +147,6 @@ if ( isset( $_GET['export'] ) && current_user_can( 'manage_options' ) ) {
                             <span title="גרסה <?php echo esc_attr( $l['consent_version'] ?? '' ); ?> · <?php echo esc_attr( $l['consent_time'] ?? '' ); ?>" style="color:#0a8f3c;font-weight:700">✓</span>
                         <?php else : ?>
                             <span title="ללא הסכמה — אסור לפנות שיווקית" style="color:#b32d2e;font-weight:700">✗</span>
-                        <?php endif; ?>
-                        <?php
-                        $crm = $l['logicare'] ?? '';
-                        if ( $crm === 'sent' ) : ?>
-                            <br><span title="נשלח ל-Logicare" style="color:#0a8f3c;font-size:11px">CRM ✓</span>
-                        <?php elseif ( $crm !== '' && $crm !== 'disabled' && $crm !== 'not_configured' ) : ?>
-                            <br><span title="<?php echo esc_attr( $crm ); ?>" style="color:#b32d2e;font-size:11px">CRM ✗</span>
                         <?php endif; ?>
                     </td>
                     <td>

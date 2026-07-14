@@ -3,6 +3,15 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [2.4.0] — 2026-07-14
+### Removed
+- **Logicare CRM integration removed entirely.** Logicare is a client-specific Israeli
+  CRM (Paz Medical Care) and is not relevant to a resellable white-label product. Removed
+  the enable toggle, Base URL, API key, `send_to_logicare`, System-Check CRM row, the CRM
+  status column/badge in the leads table + CSV + reports, and all `logicare_*` settings.
+  A future generic CRM should be a provider-agnostic webhook, not Logicare.
+  (The "לידים ו-CRM" settings tab is now simply "לידים".)
+
 ## [2.3.0] — 2026-07-06
 ### Added
 - **Desktop auto-open (call-to-action)** — optional setting that automatically opens

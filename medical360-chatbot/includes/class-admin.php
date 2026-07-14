@@ -173,6 +173,7 @@ class M360_Admin {
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'logicare_enabled', 'logicare_base_url', 'logicare_api_key',
+            'logicare_default_branch', 'logicare_job_branch', 'logicare_job_department', 'logicare_routing_rules',
             'report_recipients', 'report_daily', 'report_weekly',
         ];
         $secret_keys = [ 'ai_api_key', 'openai_api_key', 'logicare_api_key' ];

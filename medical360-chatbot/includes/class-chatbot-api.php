@@ -250,6 +250,9 @@ class M360_Chatbot_API {
         $summary  = $this->ai->summarize_conversation( $ctx_rows, $lang ); // FR-007 auto-summary
         // Classify: job-seeker vs marketing inquiry (from the conversation + interest + dept)
         $lead_type = $this->classify_lead_type( $context . ' ' . $interest . ' ' . $department . ' ' . $message );
+        // Route to the correct Logicare branch (סניף) + department (מחלקה) by page
+        $page_title_param = sanitize_text_field( (string) $request->get_param( 'page_title' ) );
+        $route     = $this->resolve_logicare_route( $lead_type, $page_title_param, $department );
         $now      = current_time( 'mysql' );
 
         // Save the lead with the full data model (section 12)
@@ -281,13 +284,16 @@ class M360_Chatbot_API {
             'conversation_length'=> count( $ctx_rows ),
             'lead_status'        => 'new',
             'lead_type'          => $lead_type,   // 'job' | 'marketing'
+            'crm_branch'         => $route['branch'],      // Logicare סניף
+            'crm_department'     => $route['department'],  // Logicare מחלקה
         ];
         // Push to the Logicare CRM (if configured) and record the outcome on the lead
         $crm = $this->send_to_logicare( [
             'name' => $name, 'phone' => $phone, 'email' => $email,
             'summary' => $summary, 'context' => $context, 'interest' => $interest,
             'source' => $source, 'campaign' => $utm_campaign,
-            'landing_name' => $department, 'department' => $department,
+            'landing_name' => $department,
+            'branch' => $route['branch'], 'department' => $route['department'],
         ] );
         $leads[ array_key_last( $leads ) ]['logicare'] = $crm['status'];
 
@@ -386,6 +392,46 @@ class M360_Chatbot_API {
     }
 
     /**
+     * Decide which Logicare branch (סניף) + department (מחלקה) a lead belongs to,
+     * based on the page it came from — driven by an admin-editable routing table.
+     *
+     * Rules setting `logicare_routing_rules`: one rule per line, pipe-separated:
+     *   keyword | branch | department
+     * First rule whose keyword appears in the page title/department wins. Lines
+     * starting with # are comments. Job-seekers route to the recruitment department.
+     */
+    private function resolve_logicare_route( string $lead_type, string $page_title, string $department ): array {
+        $default_branch = trim( (string) $this->db->get_setting( 'logicare_default_branch', '' ) );
+        $hay = mb_strtolower( trim( $page_title . ' ' . $department ) );
+
+        // Job-seekers always go to the recruitment (דרושים) department
+        if ( $lead_type === 'job' ) {
+            $jd = trim( (string) $this->db->get_setting( 'logicare_job_department', '' ) );
+            if ( $jd !== '' ) {
+                $jb = trim( (string) $this->db->get_setting( 'logicare_job_branch', '' ) );
+                return [ 'branch' => ( $jb !== '' ? $jb : $default_branch ), 'department' => $jd ];
+            }
+        }
+
+        $rules = (string) $this->db->get_setting( 'logicare_routing_rules', '' );
+        foreach ( preg_split( '/\r\n|\r|\n/', $rules ) as $line ) {
+            $line = trim( $line );
+            if ( $line === '' || $line[0] === '#' ) continue;
+            $parts = array_map( 'trim', explode( '|', $line ) );
+            if ( count( $parts ) < 3 ) continue;
+            $kw = mb_strtolower( $parts[0] );
+            if ( $kw !== '' && mb_strpos( $hay, $kw ) !== false ) {
+                return [
+                    'branch'     => ( $parts[1] !== '' ? $parts[1] : $default_branch ),
+                    'department' => $parts[2],
+                ];
+            }
+        }
+        // No rule matched — fall back to the default branch + the raw page department
+        return [ 'branch' => $default_branch, 'department' => $department ];
+    }
+
+    /**
      * Push a captured lead to the Logicare CRM (POST /logicare/api/new_lead/).
      * Returns [ 'status' => sent|failed:…|error:…|disabled|not_configured ].
      */
@@ -404,6 +450,12 @@ class M360_Chatbot_API {
             $details .= ( $details !== '' ? "\n\n" : '' ) . $lead['context'];
         }
 
+        // Route the lead to the right Logicare branch (סניף) + department (מחלקה).
+        // Both field-name variants are sent so whichever the Zapier endpoint maps wins;
+        // unmapped keys are ignored by Logicare.
+        $branch = trim( (string) ( $lead['branch'] ?? '' ) );
+        $dept   = trim( (string) ( $lead['department'] ?? '' ) );
+
         $payload = [
             'api_key'         => $key,
             'name'            => (string) ( $lead['name'] ?? '' ),
@@ -413,14 +465,17 @@ class M360_Chatbot_API {
             'referrer'        => (string) ( $lead['source'] ?? '' ) ?: 'בוט האתר',
             'campaign'        => (string) ( $lead['campaign'] ?? '' ),
             'landing'         => (string) ( $lead['landing_name'] ?? '' ),
-            'department_name' => (string) ( $lead['department'] ?? '' ),
+            'department_name' => $dept,
+            'department'      => $dept,
+            'branch_name'     => $branch,
+            'branch'          => $branch,
         ];
         if ( ! empty( $lead['email'] ) && is_email( $lead['email'] ) ) {
             $payload['email'] = $lead['email'];
         }
         // Drop empty optional fields (keep required ones)
-        foreach ( [ 'referrer_notes', 'campaign', 'landing', 'department_name' ] as $opt ) {
-            if ( $payload[ $opt ] === '' ) unset( $payload[ $opt ] );
+        foreach ( [ 'referrer_notes', 'campaign', 'landing', 'department_name', 'department', 'branch_name', 'branch' ] as $opt ) {
+            if ( ( $payload[ $opt ] ?? '' ) === '' ) unset( $payload[ $opt ] );
         }
 
         $resp = wp_remote_post( $base . '/logicare/api/new_lead/', [

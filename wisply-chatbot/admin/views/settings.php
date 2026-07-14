@@ -30,7 +30,6 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
             'consent_required', 'consent_version', 'consent_text_he', 'consent_text_en', 'consent_text_ru',
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
-            'logicare_enabled', 'logicare_base_url', 'logicare_api_key',
             'report_recipients', 'report_daily', 'report_weekly',
         ];
         // Multi-line fields must keep their newlines
@@ -46,10 +45,9 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
         $_POST['proactive_enabled'] = isset( $_POST['proactive_enabled'] ) ? '1' : '0';
         $_POST['desktop_autoopen_enabled'] = isset( $_POST['desktop_autoopen_enabled'] ) ? '1' : '0';
         $_POST['consent_required']  = isset( $_POST['consent_required'] )  ? '1' : '0';
-        $_POST['logicare_enabled']  = isset( $_POST['logicare_enabled'] )  ? '1' : '0';
         $_POST['report_daily']      = isset( $_POST['report_daily'] )      ? '1' : '0';
         $_POST['report_weekly']     = isset( $_POST['report_weekly'] )     ? '1' : '0';
-        $secret_keys = [ 'ai_api_key', 'openai_api_key', 'logicare_api_key' ];
+        $secret_keys = [ 'ai_api_key', 'openai_api_key' ];
         $db          = Wisply_Database::get_instance();
 
         foreach ( $allowed as $key ) {
@@ -135,7 +133,7 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
             <button type="button" class="wisply-tab-btn" data-target="ai">🤖 AI</button>
             <button type="button" class="wisply-tab-btn" data-target="voice">🎙️ קול</button>
             <button type="button" class="wisply-tab-btn" data-target="proactive">🔔 בועית יזומה</button>
-            <button type="button" class="wisply-tab-btn" data-target="leads">📥 לידים ו-CRM</button>
+            <button type="button" class="wisply-tab-btn" data-target="leads">📥 לידים</button>
             <button type="button" class="wisply-tab-btn" data-target="design">🎨 עיצוב ותוכן</button>
             <button type="button" class="wisply-tab-btn" data-target="advanced">⚙️ מתקדם</button>
         </div>
@@ -485,37 +483,6 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
             </tr>
         </table>
 
-        <h2>🔗 חיבור ל-CRM (Logicare)</h2>
-        <table class="form-table">
-            <tr>
-                <th>הפעלה</th>
-                <td>
-                    <label>
-                        <input type="checkbox" name="logicare_enabled" value="1"
-                               <?php checked( ( $settings['logicare_enabled'] ?? '0' ), '1' ); ?>>
-                        שלח כל ליד חדש אוטומטית ל-Logicare
-                    </label>
-                    <p class="description">בנוסף למייל ולשמירה בדשבורד — הליד נשלח ישירות ל-CRM.</p>
-                </td>
-            </tr>
-            <tr>
-                <th>כתובת בסיס (Base URL)</th>
-                <td>
-                    <input type="url" name="logicare_base_url" class="regular-text" dir="ltr"
-                           value="<?php echo wisply_v('logicare_base_url'); ?>" placeholder="https://app.logicare.co.il">
-                    <p class="description">הדומיין של Logicare בלבד, ללא / בסוף (הנתיב <code>/logicare/api/new_lead/</code> מתווסף אוטומטית).</p>
-                </td>
-            </tr>
-            <tr>
-                <th>API Key</th>
-                <td>
-                    <input type="password" name="logicare_api_key" class="regular-text" dir="ltr" autocomplete="new-password"
-                           placeholder="<?php echo ! empty( $settings['logicare_api_key'] ) ? '✅ מפתח מוגדר — הכנס חדש להחלפה' : 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'; ?>">
-                    <p class="description">ה-UUID של החברה ב-Logicare (נשמר מוצפן). נבדק בכפתור "בדוק מערכת" למעלה.</p>
-                </td>
-            </tr>
-        </table>
-
         <h2>📧 דוחות לידים אוטומטיים</h2>
         <table class="form-table">
             <tr>
@@ -684,7 +651,6 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
                 html += row('צ׳אט OpenAI (תשובות)', d.openai_chat);
                 html += row('דיבור OpenAI (TTS)', d.openai_tts);
                 if (d.realtime) html += row('Real-Time (דיבור מיידי)', d.realtime);
-                if (d.logicare) html += row('Logicare (CRM)', d.logicare);
                 html += '</table>';
                 const v = d.values || {};
                 html += '<p style="margin-top:10px;color:#555">ערכים פעילים כעת: ספק=' + v.ai_provider + ' · מודל=' + v.openai_model +

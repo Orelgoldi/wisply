@@ -3,6 +3,17 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [4.6.0] — 2026-07-14
+### Added
+- **Logicare branch + department routing** — each lead is now routed to the correct
+  Logicare סניף (branch) + מחלקה (department) based on the page it came from, via an
+  admin-editable table (`מילת מפתח בדף | סניף | מחלקה`, first match wins). Job-seekers
+  route to a dedicated recruitment (דרושים) branch/department regardless of page.
+  New settings under "🧭 ניתוב לידים לסניף ומחלקה": default branch, job branch/department,
+  and the rules table (pre-filled with the Paz Medical Care hospital/workshops/clinics map).
+  The lead push sends `branch_name`/`branch` + `department_name`/`department` (Logicare is a
+  Zapier-style endpoint that routes by name; the API exposes no branch/department ID listing).
+
 ## [4.5.0] — 2026-07-06
 ### Added
 - **Desktop auto-open (call-to-action)** — optional setting that automatically opens
