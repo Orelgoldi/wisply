@@ -65,6 +65,7 @@
   const IDLE_MS = 15 * 60 * 1000;   // 15 minutes
   let idleTimer = null;
   let hadActivity = false;          // did the user send anything this session?
+  let chatEnded  = false;           // conversation closed (idle timeout / message limit)
 
   function resetIdle() {
     clearTimeout(idleTimer);
@@ -72,15 +73,23 @@
   }
   function onIdle() {
     if (!hadActivity) return;       // nothing to end
+    endChat({ he:'⏱️ השיחה הסתיימה עקב חוסר פעילות.',
+              en:'⏱️ The conversation ended due to inactivity.',
+              ru:'⏱️ Разговор завершён из-за неактивности.' }[lang] || '');
+  }
+
+  /* Managed end (FR-007A): never end without an action — freeze the composer and
+     offer a fresh start. Shared by the idle timeout and the message limit (F3). */
+  function endChat(note) {
+    if (chatEnded) return;
+    chatEnded = true;
+    clearTimeout(idleTimer);
     // Start a fresh conversation for the next message
     sid = newSid();
     sessionStorage.setItem('m360_sid', sid);
     hadActivity = false;
+    setComposer(false);
 
-    // Managed end (FR-007A): never end without an action — offer a fresh start
-    const note = { he:'⏱️ השיחה הסתיימה עקב חוסר פעילות.',
-                   en:'⏱️ The conversation ended due to inactivity.',
-                   ru:'⏱️ Разговор завершён из-за неактивности.' }[lang] || '';
     const msgs = $id('m-msgs');
     if (!msgs) return;
     const el = document.createElement('div');
@@ -96,12 +105,24 @@
     scroll(msgs);
   }
 
+  /* Enable/disable the composer (input + send + mic) while a chat is closed */
+  function setComposer(on) {
+    const ta = $id('m-textarea');
+    if (ta) { if (!on) { ta.value = ''; ta.style.height = ''; } ta.disabled = !on; }
+    const snd = $id('m-send');
+    if (snd) snd.disabled = !on || !(ta && ta.value.trim());
+    const mic = $id('m-mic');
+    if (mic) mic.disabled = !on;
+  }
+
   function startNewChat() {
     sid = newSid();
     sessionStorage.setItem('m360_sid', sid);
     hadActivity = false;
+    chatEnded = false;
     const m = $id('m-msgs');
     if (m) m.innerHTML = '';
+    setComposer(true);
     greeting();
     resetIdle();
     setTimeout(() => $id('m-textarea')?.focus(), 50);
@@ -114,6 +135,8 @@
       error:'אופס, משהו השתבש. נסו שוב או צרו קשר טלפוני.',
       lead_title:'נשמח לחזור אליכם — השאירו פרטים', lead_name:'שם מלא',
       lead_phone:'טלפון', lead_email:'אימייל (לא חובה)', lead_btn:'שליחה', lead_ok:'תודה! ניצור איתכם קשר בהקדם.',
+      lead_required:'נא למלא את כל שדות החובה', lead_contact:'נא להשאיר טלפון או אימייל כדי שנוכל לחזור אליכם', call_now:'📞 התקשרו עכשיו',
+      chat_ended:'✅ השיחה הסתיימה. תודה שפניתם אלינו!',
       suggest:'שאלות נפוצות', what_to_know:'מה תרצה/י לדעת?', new_chat:'התחל/י שיחה חדשה',
       ask_yes:'כן, אשמח', ask_no:'לא, תודה', ask_declined:'בסדר גמור! אני כאן אם תצטרך/י עוד מידע 😊',
       chips:['אילו מחלקות שיקום יש?','איך מתבצע תהליך הקבלה?','איפה אתם ממוקמים?','דברו איתי על הסדנאות'],
@@ -127,6 +150,8 @@
       error:'Oops, something went wrong. Please try again or call us.',
       lead_title:'Leave your details and we\'ll get back to you', lead_name:'Full name',
       lead_phone:'Phone', lead_email:'Email (optional)', lead_btn:'Send', lead_ok:'Thank you! We\'ll be in touch shortly.',
+      lead_required:'Please fill in all required fields', lead_contact:'Please leave a phone or an email so we can get back to you', call_now:'📞 Call us now',
+      chat_ended:'✅ The conversation has ended. Thank you!',
       suggest:'Popular questions', what_to_know:'What would you like to know?', new_chat:'Start a new chat',
       ask_yes:'Yes, please', ask_no:'No, thanks', ask_declined:'No problem! I\'m here if you need more info 😊',
       chips:['What rehab departments are there?','How does admission work?','Where are you located?','Tell me about the workshops'],
@@ -140,6 +165,8 @@
       error:'Упс, что-то пошло не так. Попробуйте снова или позвоните нам.',
       lead_title:'Оставьте контакты, и мы свяжемся с вами', lead_name:'Полное имя',
       lead_phone:'Телефон', lead_email:'Email (необязательно)', lead_btn:'Отправить', lead_ok:'Спасибо! Мы скоро свяжемся.',
+      lead_required:'Пожалуйста, заполните все обязательные поля', lead_contact:'Оставьте телефон или email, чтобы мы могли связаться с вами', call_now:'📞 Позвонить сейчас',
+      chat_ended:'✅ Разговор завершён. Спасибо!',
       suggest:'Частые вопросы', what_to_know:'Что вы хотите узнать?', new_chat:'Начать новый чат',
       ask_yes:'Да, с удовольствием', ask_no:'Нет, спасибо', ask_declined:'Хорошо! Я здесь, если понадобится 😊',
       chips:['Какие есть отделения реабилитации?','Как проходит приём?','Где вы находитесь?','Расскажите о мастер-классах'],
@@ -481,7 +508,7 @@
   function send() { sendText($id('m-textarea').value.trim()); }
 
   async function sendText(text) {
-    if (!text) return;
+    if (!text || chatEnded) return;
     clearSuggestions();
     hadActivity = true;
     resetIdle();
@@ -520,13 +547,22 @@
         .replace(/\[EMERGENCY\]/ig, '')
         .trim();
 
+      // Message limit reached (F3) — the server closes the conversation on this reply
+      const ended = !!d.conversation_ended;
+
       botMsg(cleanReply);
       if (emergency)  emergencyButtons();
-      if (optsMatch)  optionButtons(optsMatch[1].split('|').map(s => s.trim()).filter(Boolean));
-      if (askLead)    askLeadButtons();
-      if (showForm)   leadForm();
+      // Follow-up prompts would be dead ends once the conversation is over
+      if (!ended) {
+        if (optsMatch) optionButtons(optsMatch[1].split('|').map(s => s.trim()).filter(Boolean));
+        if (askLead)   askLeadButtons();
+        if (showForm)  leadForm();
+      }
       if (actionMatch) actionButton(actionMatch[1].toLowerCase());
       speak(cleanReply);   // read the answer aloud if voice output is on
+
+      // Close out: CTA first, then end the chat exactly like the idle timeout does
+      if (ended) { endCta(); endChat(t('chat_ended')); }
     } catch {
       dots.remove();
       botMsg(t('error'), []);
@@ -576,12 +612,37 @@
     scroll(msgs);
   }
 
-  /* ── Lead form ── */
+  /* ── Lead form ──
+     Each field is admin-configurable (F1): required | optional | hidden. */
+  const LEAD_FIELDS = ['name', 'phone', 'email'];
+  const FIELD_MODE  = {
+    name:  S.lead_field_name  || 'required',
+    phone: S.lead_field_phone || 'required',
+    email: S.lead_field_email || 'optional',
+  };
+  const fieldOn  = k => FIELD_MODE[k] !== 'hidden';
+  const fieldReq = k => FIELD_MODE[k] === 'required';
+
+  /* Field label; required fields get a ' *' marker. The default labels carry an
+     "(optional)" hint — drop it when the admin made the field mandatory. */
+  function fieldLabel(k) {
+    const base = t('lead_' + k);
+    return fieldReq(k) ? base.replace(/\s*\([^)]*\)\s*$/, '') + ' *' : base;
+  }
+
+  /* Only the fields the admin actually shows are sent to /lead */
+  function leadFields(fd) {
+    const out = {};
+    LEAD_FIELDS.forEach(k => { if (fieldOn(k)) out[k] = String(fd.get(k) || '').trim(); });
+    return out;
+  }
+
   function leadForm() {
     const msgs = $id('m-msgs');
     const card = document.createElement('div');
     card.className = 'm-lead';
     const fid = 'mlf' + Date.now();
+    const fsid = sid;   // pin the conversation this lead belongs to — sid may rotate later
     const consentText = S['consent_text_'+lang] || S.consent_text_he || '';
     const consentReq  = (S.consent_required ?? '1') !== '0';
     const consentHtml = consentText ? `
@@ -590,13 +651,19 @@
           <span>${esc(consentText)}</span>
         </label>` : '';
 
+    const inputs = {
+      name:  k => `<input type="text"  name="name"  placeholder="${esc(fieldLabel(k))}" aria-label="${esc(fieldLabel(k))}" autocomplete="name">`,
+      phone: k => `<input type="tel"   name="phone" placeholder="${esc(fieldLabel(k))}" aria-label="${esc(fieldLabel(k))}" autocomplete="tel">`,
+      email: k => `<input type="email" name="email" placeholder="${esc(fieldLabel(k))}" aria-label="${esc(fieldLabel(k))}" autocomplete="email">`,
+    };
+    const fieldsHtml = LEAD_FIELDS.filter(fieldOn).map(k => inputs[k](k)).join('\n        ');
+
     card.innerHTML = `
       <strong>${t('lead_title')}</strong>
       <form id="${fid}" style="display:flex;flex-direction:column;gap:8px">
-        <input type="text"  name="name"  placeholder="${t('lead_name')}"  required autocomplete="name">
-        <input type="tel"   name="phone" placeholder="${t('lead_phone')}" required autocomplete="tel">
-        <input type="email" name="email" placeholder="${t('lead_email')}" autocomplete="email">
+        ${fieldsHtml}
         ${consentHtml}
+        <div class="m-lead-err" role="alert" hidden style="color:#b3261e;font-size:12px;font-weight:600"></div>
         <button type="submit" class="m-lead-btn">${t('lead_btn')}</button>
       </form>`;
     msgs.appendChild(card);
@@ -605,25 +672,80 @@
     card.querySelector('form').addEventListener('submit', async e => {
       e.preventDefault();
       const fd = new FormData(e.target);
+      const err = card.querySelector('.m-lead-err');
+
+      // Required fields are validated here (not via the `required` attribute) so we
+      // can show one inline message instead of the browser's native bubble
+      const missing = LEAD_FIELDS.filter(k => fieldOn(k) && fieldReq(k) && !String(fd.get(k) || '').trim());
+      if (missing.length) {
+        if (err) { err.textContent = t('lead_required'); err.hidden = false; }
+        card.querySelector(`[name="${missing[0]}"]`)?.focus();
+        return;
+      }
+      // Mirror the server rule: if any contact field is on screen, one of them must be
+      // filled. Without this the server 422s a form we happily let them submit.
+      if ((fieldOn('phone') || fieldOn('email')) &&
+          !String(fd.get('phone') || '').trim() && !String(fd.get('email') || '').trim()) {
+        if (err) { err.textContent = t('lead_contact'); err.hidden = false; }
+        card.querySelector('[name="phone"], [name="email"]')?.focus();
+        return;
+      }
+      if (err) err.hidden = true;
+
       const consent = consentText ? !!fd.get('consent') : true;
-      const btn = e.target.querySelector('button');
+      const btn = e.target.querySelector('button[type="submit"]');
       btn.disabled = true;
       try {
         const res = await fetch(CFG.apiUrl + '/lead', {
           method:'POST',
           headers:{'Content-Type':'application/json','X-WP-Nonce':CFG.nonce},
           body: JSON.stringify({
-            name:fd.get('name'), phone:fd.get('phone'), email:fd.get('email')||'',
-            session_id:sid, lang, page_url:location.href,
+            ...leadFields(fd),
+            session_id:fsid, lang, page_url:location.href,
             consent: consent ? 1 : 0,
             consent_text: consentText,
             ...leadContext(),
           }),
         });
-        if (!res.ok) { btn.disabled = false; return; }   // e.g. consent missing — let them fix
-      } catch { btn.disabled = false; return; }
+        if (!res.ok) {
+          // Show the server's reason (missing field / no contact method / consent)
+          // instead of a click that silently does nothing.
+          let msg = '';
+          try { msg = (await res.json()).error || ''; } catch {}
+          if (err) { err.textContent = msg || t('error'); err.hidden = false; }
+          btn.disabled = false;
+          return;
+        }
+      } catch {
+        if (err) { err.textContent = t('error'); err.hidden = false; }
+        btn.disabled = false;
+        return;
+      }
       card.innerHTML = `<div style="text-align:center;padding:8px;color:var(--c-teal-600);font-weight:700">✓ ${t('lead_ok')}</div>`;
     });
+  }
+
+  /* ── End-of-conversation CTA (F2) ──
+     conversation_end_action: 'lead' | 'call' | 'both' | 'none' */
+  function endCta() {
+    const mode = S.conversation_end_action || 'lead';
+    if (mode === 'none') return;
+    if (mode === 'call' || mode === 'both') callButton();
+    if (mode === 'lead' || mode === 'both') leadForm();
+  }
+
+  /* Prominent tel: button — same phone source as the header call action (S.phone) */
+  function callButton() {
+    const phone = (S.phone || '').trim();
+    if (!phone) return;             // nothing configured — silently skip
+    const msgs = $id('m-msgs');
+    if (!msgs) return;
+    const a = document.createElement('a');
+    a.className = 'm-action-link m-call-cta';
+    a.href = 'tel:' + phone.replace(/[^\d+]/g, '');
+    a.textContent = t('call_now');
+    msgs.appendChild(a);
+    scroll(msgs);
   }
 
   /* ── Emergency resources (101 + mental-health hotlines) ── */

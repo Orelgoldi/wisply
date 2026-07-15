@@ -44,8 +44,9 @@ class Wisply_Chatbot_API {
             'callback'            => [ $this, 'handle_lead' ],
             'permission_callback' => [ $this, 'rate_limit_check' ],
             'args'                => [
-                'name'       => [ 'required' => true,  'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ],
-                'phone'      => [ 'required' => true,  'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ],
+                // Required-ness is decided in the handler — each field can be חובה/רשות/מוסתר
+                'name'       => [ 'required' => false, 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ],
+                'phone'      => [ 'required' => false, 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ],
                 'email'      => [ 'required' => false, 'type' => 'string', 'sanitize_callback' => 'sanitize_email' ],
                 'message'    => [ 'required' => false, 'type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field' ],
                 'session_id' => [ 'required' => false, 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ],
@@ -212,23 +213,72 @@ class Wisply_Chatbot_API {
         // Get or create the session's conversation
         $conv_id = $this->db->get_or_create_conversation( $session_id, $lang, $ip_hash, $page_url );
 
+        // Message limit (0 = unlimited): the turn is the session's USER messages + this one.
+        // Only counted when a limit is set, so the default path stays a single-query flow.
+        $max_messages = (int) $this->db->get_setting( 'max_messages', '0' );
+        $turn         = $max_messages > 0 ? $this->count_user_turns( $conv_id ) + 1 : 0;
+
+        // Over the limit — the conversation is over: no AI call, no extra messages stored
+        if ( $max_messages > 0 && $turn > $max_messages ) {
+            return new WP_REST_Response( [
+                'reply'              => $this->limit_reply( $lang ),
+                'conversation_ended' => true,
+                'sources'            => [],
+            ], 200 );
+        }
+
         // Load recent history
         $history = $this->db->get_conversation_messages( $conv_id, 8 );
 
         // Store user message
         $this->db->add_message( $conv_id, 'user', $message );
 
-        // Get AI reply
-        $result = $this->ai->get_reply( $message, $lang, $history );
+        // Get AI reply — the turn lets the AI converge toward closing near the limit
+        $result = $this->ai->get_reply( $message, $lang, $history, $turn );
 
         // Store assistant message, flag unanswered if needed
         $this->db->add_message( $conv_id, 'assistant', $result['reply'], $result['unanswered'] );
 
         return new WP_REST_Response( [
-            'reply'      => $result['reply'],
-            'unanswered' => $result['unanswered'],
-            'sources'    => $result['sources'] ?? [],
+            'reply'              => $result['reply'],
+            'unanswered'         => $result['unanswered'],
+            'sources'            => $result['sources'] ?? [],
+            'conversation_ended' => false,
         ], 200 );
+    }
+
+    /** True when at least one contact field is visible, so we can demand one of them. */
+    private function contact_required(): bool {
+        return $this->db->get_setting( 'lead_field_phone', 'required' ) !== 'hidden'
+            || $this->db->get_setting( 'lead_field_email', 'optional' ) !== 'hidden';
+    }
+
+    /**
+     * Closing line when the message limit is reached. Localised, and it only promises
+     * a call-back when a lead form is actually going to be shown.
+     */
+    private function limit_reply( string $lang ): string {
+        $action = $this->db->get_setting( 'conversation_end_action', 'lead' );
+        $asks   = in_array( $action, [ 'lead', 'both' ], true );
+        $calls  = $action === 'call';
+
+        return match ( $lang ) {
+            'en' => $asks  ? 'Thanks for the chat! 🙏 Leave your details and we\'ll get back to you.'
+                  : ( $calls ? 'Thanks for the chat! 🙏 Feel free to call us and we\'ll be happy to help.'
+                             : 'Thanks for the chat! 🙏 Have a great day.' ),
+            'ru' => $asks  ? 'Спасибо за беседу! 🙏 Оставьте контакты, и мы свяжемся с вами.'
+                  : ( $calls ? 'Спасибо за беседу! 🙏 Звоните нам — будем рады помочь.'
+                             : 'Спасибо за беседу! 🙏 Хорошего дня.' ),
+            default => $asks ? 'תודה רבה על השיחה! 🙏 כדי להמשיך מכאן, השאירו פרטים ונחזור אליכם.'
+                  : ( $calls ? 'תודה רבה על השיחה! 🙏 מוזמנים להתקשר אלינו ונשמח לעזור.'
+                             : 'תודה רבה על השיחה! 🙏 יום נעים.' ),
+        };
+    }
+
+    /** How many USER messages the conversation already holds (before the current one). */
+    private function count_user_turns( int $conv_id ): int {
+        $rows = $this->db->get_conversation_full( $conv_id );
+        return count( array_filter( $rows, static fn( $r ) => ( $r['role'] ?? '' ) === 'user' ) );
     }
 
     // ─── Public: /lead ────────────────────────────────────────────────────────
@@ -241,8 +291,17 @@ class Wisply_Chatbot_API {
         $lang    = $request->get_param( 'lang' );
         $session = (string) $request->get_param( 'session_id' );
 
-        if ( empty( $name ) || empty( $phone ) ) {
-            return new WP_REST_Response( [ 'error' => 'Name and phone are required' ], 400 );
+        // ── Lead-form field modes (חובה / רשות / מוסתר) ──
+        [ $name, $phone, $email, $missing ] = $this->apply_lead_field_modes( $name, $phone, $email );
+        if ( $missing ) {
+            return new WP_REST_Response( [ 'error' => 'חסרים שדות חובה: ' . implode( ', ', $missing ) ], 422 );
+        }
+        // A lead we cannot contact is worthless — but only enforce this when the admin
+        // actually left a contact field visible. If both are hidden that's an explicit
+        // (if odd) choice, and rejecting here would silently 422 every single lead, since
+        // the widget has no field to offer. The widget mirrors this exact rule.
+        if ( $this->contact_required() && $phone === '' && $email === '' ) {
+            return new WP_REST_Response( [ 'error' => 'נדרש אמצעי יצירת קשר אחד לפחות — טלפון או אימייל.' ], 422 );
         }
 
         // ── Marketing consent (Opt-In, FR-006) ──
@@ -378,12 +437,41 @@ class Wisply_Chatbot_API {
         $headers = [ 'Content-Type: text/html; charset=UTF-8' ];
         // Reply-To the lead's email if provided, so you can reply directly
         if ( $email && is_email( $email ) ) {
-            $headers[] = 'Reply-To: ' . sanitize_text_field( $name ) . ' <' . $email . '>';
+            $headers[] = 'Reply-To: ' . ( $name !== ''
+                ? sanitize_text_field( $name ) . ' <' . $email . '>'
+                : $email );
         }
 
         $sent = wp_mail( $to, $subject, $body, $headers );
 
         return new WP_REST_Response( [ 'success' => true, 'mail_sent' => (bool) $sent ], 200 );
+    }
+
+    /**
+     * Apply the admin's per-field modes to a submitted lead.
+     * Each of name/phone/email is 'required' (חובה), 'optional' (רשות) or 'hidden' (מוסתר):
+     * a hidden field is forced empty (the widget never shows it, so ignore what was sent),
+     * a required field that arrived empty is collected as a missing field.
+     * Returns [ name, phone, email, missing_field_labels ].
+     */
+    private function apply_lead_field_modes( ?string $name, ?string $phone, ?string $email ): array {
+        $fields = [
+            'name'  => [ 'value' => trim( (string) $name ),  'label' => 'שם',    'default' => 'required' ],
+            'phone' => [ 'value' => trim( (string) $phone ), 'label' => 'טלפון', 'default' => 'required' ],
+            'email' => [ 'value' => trim( (string) $email ), 'label' => 'אימייל', 'default' => 'optional' ],
+        ];
+        $missing = [];
+
+        foreach ( $fields as $key => $field ) {
+            $mode = (string) $this->db->get_setting( 'lead_field_' . $key, $field['default'] );
+            if ( $mode === 'hidden' ) {
+                $fields[ $key ]['value'] = '';
+            } elseif ( $mode === 'required' && $field['value'] === '' ) {
+                $missing[] = $field['label'];
+            }
+        }
+
+        return [ $fields['name']['value'], $fields['phone']['value'], $fields['email']['value'], $missing ];
     }
 
     /**

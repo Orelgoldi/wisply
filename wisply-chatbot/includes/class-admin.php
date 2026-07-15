@@ -231,6 +231,8 @@ class Wisply_Admin {
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'report_recipients', 'report_daily', 'report_weekly',
             'woo_enabled', 'woo_max_products', 'woo_show_stock', 'woo_visual_search',
+            'lead_field_name', 'lead_field_phone', 'lead_field_email',
+            'conversation_end_action', 'max_messages', 'wrapup_margin',
         ];
         $secret_keys = [ 'ai_api_key', 'openai_api_key' ];
         $errors      = [];

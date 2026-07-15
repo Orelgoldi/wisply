@@ -3,6 +3,28 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [2.6.0] — 2026-07-15
+### Added
+- **Lead-form field control** — each of שם / טלפון / אימייל can be set to **חובה / רשות / מוסתר**.
+  Enforced identically in the widget and on the server (a hidden field is forced empty
+  server-side and never rendered client-side).
+- **End-of-conversation CTA** — choose what the visitor sees when a chat ends:
+  טופס השארת פרטים / כפתור התקשרות / גם וגם / כלום.
+- **Message limit per conversation** — cap how many messages a visitor may send
+  (0 = unlimited). A configurable number of messages before the cap the bot starts
+  converging: it stops opening new topics, summarises, and pushes for the lead. At the
+  cap the conversation closes with the chosen CTA (and the AI is not called at all).
+  New settings under 📥 לידים: שדה שם/טלפון/אימייל, בסיום שיחה, מקסימום הודעות, התחלת התכנסות.
+
+### Fixed
+- The lead form now **shows the server's rejection reason** instead of a click that
+  silently does nothing (missing required field / no contact method / consent).
+- "At least one contact method" is now enforced **only when a contact field is visible**,
+  and the widget mirrors the rule — previously hiding the phone field could make leads
+  silently unsubmittable.
+- The end-of-conversation message is **localised** (he/en/ru) and no longer promises a
+  call-back when the CTA is set to כפתור התקשרות or כלום.
+
 ## [2.5.0] — 2026-07-15
 ### Added
 - **🛒 E-commerce module (WooCommerce).** The bot now answers about the real catalogue

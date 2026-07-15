@@ -28,9 +28,10 @@ class Wisply_AI_Handler {
      * @param string $user_message   The raw user text.
      * @param string $lang           Language code: he / en / ru.
      * @param array  $history        Previous [role, content] pairs (newest first, max 8).
+     * @param int    $turn           How many USER messages this session has, including the current one (0 = unknown).
      * @return array{reply:string, unanswered:bool, sources:array}
      */
-    public function get_reply( string $user_message, string $lang, array $history = [] ): array {
+    public function get_reply( string $user_message, string $lang, array $history = [], int $turn = 0 ): array {
         $lang = in_array( $lang, self::SUPPORTED_LANGS, true ) ? $lang : 'he';
 
         // Expand the query with synonyms for common intents (location/contact/hours),
@@ -73,8 +74,8 @@ class Wisply_AI_Handler {
         $provider = $this->db->get_setting( 'ai_provider', 'claude' );
 
         $result = match ( $provider ) {
-            'openai' => $this->call_openai( $user_message, $lang, $history, $docs, $products ),
-            default  => $this->call_claude( $user_message, $lang, $history, $docs, $products ),
+            'openai' => $this->call_openai( $user_message, $lang, $history, $docs, $products, $turn ),
+            default  => $this->call_claude( $user_message, $lang, $history, $docs, $products, $turn ),
         };
 
         $result['sources'] = array_map( fn( $d ) => [ 'title' => $d['title'], 'url' => $d['url'] ], $docs );
@@ -125,7 +126,7 @@ class Wisply_AI_Handler {
 
     // ─── Claude (Anthropic) ───────────────────────────────────────────────────
 
-    private function call_claude( string $user_message, string $lang, array $history, array $docs, array $products = [] ): array {
+    private function call_claude( string $user_message, string $lang, array $history, array $docs, array $products = [], int $turn = 0 ): array {
         $api_key = $this->db->get_setting( 'ai_api_key', '' );
         $model   = $this->db->get_setting( 'ai_model', 'claude-sonnet-4-6' );
 
@@ -133,7 +134,7 @@ class Wisply_AI_Handler {
             return $this->fallback_no_config( $lang );
         }
 
-        $system  = $this->build_system_prompt( $lang, $docs, $user_message, $products );
+        $system  = $this->build_system_prompt( $lang, $docs, $user_message, $products, $turn );
         $messages = $this->build_message_array( $history, $user_message );
 
         $payload = [
@@ -172,7 +173,7 @@ class Wisply_AI_Handler {
 
     // ─── OpenAI ───────────────────────────────────────────────────────────────
 
-    private function call_openai( string $user_message, string $lang, array $history, array $docs, array $products = [] ): array {
+    private function call_openai( string $user_message, string $lang, array $history, array $docs, array $products = [], int $turn = 0 ): array {
         $api_key = $this->db->get_setting( 'openai_api_key', '' );
         $model   = $this->db->get_setting( 'openai_model', 'gpt-4o' );
 
@@ -180,7 +181,7 @@ class Wisply_AI_Handler {
             return $this->fallback_no_config( $lang );
         }
 
-        $system   = $this->build_system_prompt( $lang, $docs, $user_message, $products );
+        $system   = $this->build_system_prompt( $lang, $docs, $user_message, $products, $turn );
         $messages = array_merge(
             [ [ 'role' => 'system', 'content' => $system ] ],
             $this->build_message_array( $history, $user_message )
@@ -236,7 +237,7 @@ class Wisply_AI_Handler {
 
     // ─── Prompt construction ──────────────────────────────────────────────────
 
-    private function build_system_prompt( string $lang, array $docs, string $query = '', array $products = [] ): string {
+    private function build_system_prompt( string $lang, array $docs, string $query = '', array $products = [], int $turn = 0 ): string {
         $context_block = '';
         if ( ! empty( $docs ) ) {
             $context_block = "\n\n=== תוכן רלוונטי מהאתר ===\n";
@@ -321,6 +322,17 @@ class Wisply_AI_Handler {
                 . "• במקרה הזה מותר לשלב [ACTION:jobs] יחד עם [ASK_LEAD] באותה תשובה (זהו החריג לכלל \"סמן אחד בלבד\").";
         }
 
+        // Wrap-up: as the message limit nears, converge toward closing + lead capture
+        $max_messages   = (int) $this->db->get_setting( 'max_messages', '0' );
+        $wrapup_margin  = (int) $this->db->get_setting( 'wrapup_margin', '2' );
+        $wrapup_block   = '';
+        if ( $turn > 0 && $max_messages > 0 && $turn >= $max_messages - $wrapup_margin ) {
+            $wrapup_block = "\n\nסיום שיחה מתקרב:\n"
+                . "• השיחה מתקרבת לסיומה — אל תפתח נושאים חדשים ואל תאריך.\n"
+                . "• סכם בקצרה את מה שרלוונטי לפונה, וחתור לכך שישאיר פרטים כדי שנחזור אליו.\n"
+                . "• הוסף בסוף התשובה את הסמן [ASK_LEAD] (אלא אם כבר הושארו פרטים בשיחה).";
+        }
+
         return <<<PROMPT
 אתה "$bot", העוזר החכם של $business$type_suffix.
 ענה לגולשים על שאלות הקשורות ל-$business, בהתבסס אך ורק על תוכן האתר שמופיע למטה.$desc_block
@@ -354,6 +366,7 @@ class Wisply_AI_Handler {
 $emergency_block
 $action_block
 $jobs_block
+$wrapup_block
 $context_block
 $products_block
 PROMPT;

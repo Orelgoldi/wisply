@@ -232,6 +232,8 @@ class M360_Admin {
             'logicare_enabled', 'logicare_base_url', 'logicare_api_key',
             'logicare_default_department_id', 'logicare_job_department_id', 'logicare_routing_rules',
             'report_recipients', 'report_daily', 'report_weekly',
+            'lead_field_name', 'lead_field_phone', 'lead_field_email',
+            'conversation_end_action', 'max_messages', 'wrapup_margin',
         ];
         $secret_keys = [ 'ai_api_key', 'openai_api_key', 'logicare_api_key' ];
         $errors      = [];

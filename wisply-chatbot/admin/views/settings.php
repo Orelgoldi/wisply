@@ -32,6 +32,8 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'report_recipients', 'report_daily', 'report_weekly',
             'woo_enabled', 'woo_max_products', 'woo_show_stock', 'woo_visual_search',
+            'lead_field_name', 'lead_field_phone', 'lead_field_email',
+            'conversation_end_action', 'max_messages', 'wrapup_margin',
         ];
         // Multi-line fields must keep their newlines
         $textarea_keys = [
@@ -422,6 +424,71 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
         </table>
 
         </div><div class="wisply-pane" data-pane="leads">
+        <h2>📝 טופס לידים וסיום שיחה</h2>
+        <table class="form-table">
+            <tr>
+                <th>שדה: שם</th>
+                <td>
+                    <select name="lead_field_name">
+                        <option value="required" <?php echo wisply_sel('lead_field_name','required'); ?>>חובה</option>
+                        <option value="optional" <?php echo wisply_sel('lead_field_name','optional'); ?>>רשות</option>
+                        <option value="hidden"   <?php echo wisply_sel('lead_field_name','hidden'); ?>>מוסתר</option>
+                    </select>
+                    <p class="description">מה מוצג בטופס השארת הפרטים ומה חובה למלא.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>שדה: טלפון</th>
+                <td>
+                    <select name="lead_field_phone">
+                        <option value="required" <?php echo wisply_sel('lead_field_phone','required'); ?>>חובה</option>
+                        <option value="optional" <?php echo wisply_sel('lead_field_phone','optional'); ?>>רשות</option>
+                        <option value="hidden"   <?php echo wisply_sel('lead_field_phone','hidden'); ?>>מוסתר</option>
+                    </select>
+                    <p class="description">מה מוצג בטופס השארת הפרטים ומה חובה למלא.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>שדה: אימייל</th>
+                <td>
+                    <select name="lead_field_email">
+                        <option value="required" <?php echo wisply_sel('lead_field_email','required'); ?>>חובה</option>
+                        <option value="optional" <?php echo wisply_sel('lead_field_email','optional'); ?>>רשות</option>
+                        <option value="hidden"   <?php echo wisply_sel('lead_field_email','hidden'); ?>>מוסתר</option>
+                    </select>
+                    <p class="description">מה מוצג בטופס השארת הפרטים ומה חובה למלא.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>בסיום שיחה</th>
+                <td>
+                    <select name="conversation_end_action">
+                        <option value="lead" <?php echo wisply_sel('conversation_end_action','lead'); ?>>טופס השארת פרטים</option>
+                        <option value="call" <?php echo wisply_sel('conversation_end_action','call'); ?>>כפתור התקשרות</option>
+                        <option value="both" <?php echo wisply_sel('conversation_end_action','both'); ?>>גם וגם</option>
+                        <option value="none" <?php echo wisply_sel('conversation_end_action','none'); ?>>כלום</option>
+                    </select>
+                    <p class="description">מה יוצג לגולש כשהשיחה מסתיימת.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>מקסימום הודעות בשיחה</th>
+                <td>
+                    <input type="number" name="max_messages" min="0" max="50"
+                           value="<?php echo wisply_v('max_messages','0'); ?>" class="small-text">
+                    <p class="description">כמה הודעות מהגולש מותרות בשיחה. 0 = ללא הגבלה.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>התחלת התכנסות (הודעות לפני הסוף)</th>
+                <td>
+                    <input type="number" name="wrapup_margin" min="0" max="10"
+                           value="<?php echo wisply_v('wrapup_margin','2'); ?>" class="small-text">
+                    <p class="description">כמה הודעות לפני המקסימום הבוט מתחיל לסכם ולחתור להשארת פרטים.</p>
+                </td>
+            </tr>
+        </table>
+
         <h2>📋 הסכמה שיווקית (Opt-In) — חובה משפטית</h2>
         <table class="form-table">
             <tr>

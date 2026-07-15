@@ -206,6 +206,13 @@ class M360_Database {
             'report_recipients'  => '',   // comma / newline separated emails
             'report_daily'       => '1',
             'report_weekly'      => '1',
+            // Lead form fields, end-of-conversation CTA and message limit
+            'lead_field_name'    => 'required',   // required | optional | hidden
+            'lead_field_phone'   => 'required',   // required | optional | hidden
+            'lead_field_email'   => 'optional',   // required | optional | hidden
+            'conversation_end_action' => 'lead',  // lead | call | both | none
+            'max_messages'       => '0',          // max user messages per conversation; 0 = unlimited
+            'wrapup_margin'      => '2',          // start converging this many messages before the limit
         ];
         foreach ( $defaults as $key => $value ) {
             $this->set_setting( $key, $value, false );
@@ -447,6 +454,8 @@ class M360_Database {
             'consent_required', 'consent_version',
             'consent_text_he', 'consent_text_en', 'consent_text_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
+            'lead_field_name', 'lead_field_phone', 'lead_field_email',
+            'conversation_end_action', 'max_messages', 'wrapup_margin',
         ] ) );
     }
 

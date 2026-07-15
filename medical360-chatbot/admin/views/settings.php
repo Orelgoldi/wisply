@@ -29,6 +29,8 @@ if ( isset( $_POST['m360_settings_nonce'] ) ) {
             'logicare_enabled', 'logicare_base_url', 'logicare_api_key',
             'logicare_default_department_id', 'logicare_job_department_id', 'logicare_routing_rules',
             'report_recipients', 'report_daily', 'report_weekly',
+            'lead_field_name', 'lead_field_phone', 'lead_field_email',
+            'conversation_end_action', 'max_messages', 'wrapup_margin',
         ];
         // Checkboxes don't POST when unchecked — normalise to 0/1
         $_POST['voice_enabled']     = isset( $_POST['voice_enabled'] )     ? '1' : '0';
@@ -342,6 +344,71 @@ function m360_sel( string $key, string $val ): string {
         </table>
 
         </div><div class="m360-pane" data-pane="leads">
+        <h2>📝 טופס לידים וסיום שיחה</h2>
+        <table class="form-table">
+            <tr>
+                <th>שדה: שם</th>
+                <td>
+                    <select name="lead_field_name">
+                        <option value="required" <?php echo m360_sel('lead_field_name','required'); ?>>חובה</option>
+                        <option value="optional" <?php echo m360_sel('lead_field_name','optional'); ?>>רשות</option>
+                        <option value="hidden"   <?php echo m360_sel('lead_field_name','hidden'); ?>>מוסתר</option>
+                    </select>
+                    <p class="description">מה מוצג בטופס השארת הפרטים ומה חובה למלא.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>שדה: טלפון</th>
+                <td>
+                    <select name="lead_field_phone">
+                        <option value="required" <?php echo m360_sel('lead_field_phone','required'); ?>>חובה</option>
+                        <option value="optional" <?php echo m360_sel('lead_field_phone','optional'); ?>>רשות</option>
+                        <option value="hidden"   <?php echo m360_sel('lead_field_phone','hidden'); ?>>מוסתר</option>
+                    </select>
+                    <p class="description">מה מוצג בטופס השארת הפרטים ומה חובה למלא.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>שדה: אימייל</th>
+                <td>
+                    <select name="lead_field_email">
+                        <option value="required" <?php echo m360_sel('lead_field_email','required'); ?>>חובה</option>
+                        <option value="optional" <?php echo m360_sel('lead_field_email','optional'); ?>>רשות</option>
+                        <option value="hidden"   <?php echo m360_sel('lead_field_email','hidden'); ?>>מוסתר</option>
+                    </select>
+                    <p class="description">מה מוצג בטופס השארת הפרטים ומה חובה למלא.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>בסיום שיחה</th>
+                <td>
+                    <select name="conversation_end_action">
+                        <option value="lead" <?php echo m360_sel('conversation_end_action','lead'); ?>>טופס השארת פרטים</option>
+                        <option value="call" <?php echo m360_sel('conversation_end_action','call'); ?>>כפתור התקשרות</option>
+                        <option value="both" <?php echo m360_sel('conversation_end_action','both'); ?>>גם וגם</option>
+                        <option value="none" <?php echo m360_sel('conversation_end_action','none'); ?>>כלום</option>
+                    </select>
+                    <p class="description">מה יוצג לגולש כשהשיחה מסתיימת.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>מקסימום הודעות בשיחה</th>
+                <td>
+                    <input type="number" name="max_messages" min="0" max="50"
+                           value="<?php echo m360_v('max_messages','0'); ?>" class="small-text">
+                    <p class="description">כמה הודעות מהגולש מותרות בשיחה. 0 = ללא הגבלה.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>התחלת התכנסות (הודעות לפני הסוף)</th>
+                <td>
+                    <input type="number" name="wrapup_margin" min="0" max="10"
+                           value="<?php echo m360_v('wrapup_margin','2'); ?>" class="small-text">
+                    <p class="description">כמה הודעות לפני המקסימום הבוט מתחיל לסכם ולחתור להשארת פרטים.</p>
+                </td>
+            </tr>
+        </table>
+
         <h2>📋 הסכמה שיווקית (Opt-In) — חובה משפטית</h2>
         <table class="form-table">
             <tr>

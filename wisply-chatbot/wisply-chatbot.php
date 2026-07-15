@@ -3,7 +3,7 @@
  * Plugin Name:       Wisply — AI Chat Assistant
  * Plugin URI:        https://goldstein.studio
  * Description:       White-label AI chat assistant (text + voice) for any website. Answers in Hebrew, English & Russian based only on your own site content. Set your bot name, branding, colours and persona — no code.
- * Version:           2.5.0
+ * Version:           2.6.0
  * Requires at least: 6.0
  * Requires PHP:      8.1
  * Author:            Goldstein Studio
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'WISPLY_VERSION',     '2.5.0' );
+define( 'WISPLY_VERSION',     '2.6.0' );
 define( 'WISPLY_PLUGIN_FILE', __FILE__ );
 define( 'WISPLY_PLUGIN_DIR',  plugin_dir_path( __FILE__ ) );
 define( 'WISPLY_PLUGIN_URL',  plugin_dir_url( __FILE__ ) );
