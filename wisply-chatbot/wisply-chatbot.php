@@ -22,8 +22,8 @@ define( 'WISPLY_PLUGIN_URL',  plugin_dir_url( __FILE__ ) );
 define( 'WISPLY_TEXT_DOMAIN', 'wisply-chatbot' );
 // White-label product name (shown in admin menu + "Powered by"). Change to rebrand.
 defined( 'WISPLY_PRODUCT_NAME' ) || define( 'WISPLY_PRODUCT_NAME', 'Wisply' );
-// Licence + auto-update server. Override in wp-config.php while wisply.co.il is not live.
-defined( 'WISPLY_API_URL' ) || define( 'WISPLY_API_URL', 'https://wisply.vercel.app' );
+// Licence + auto-update server. Override in wp-config.php to point at a staging server.
+defined( 'WISPLY_API_URL' ) || define( 'WISPLY_API_URL', 'https://wisply.io' );
 
 require_once WISPLY_PLUGIN_DIR . 'includes/class-database.php';
 require_once WISPLY_PLUGIN_DIR . 'includes/class-license.php';
