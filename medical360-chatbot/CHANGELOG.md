@@ -3,6 +3,13 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [4.6.3] — 2026-07-15
+### Added
+- **Routing self-check** — the `/lead` endpoint returns the resolved branch/department +
+  Logicare status in its response when a `_routecheck` param is present (used only by the
+  QA test harness; the normal widget never sends it). Lets an automated test confirm each
+  department routes correctly end-to-end without logging into Logicare.
+
 ## [4.6.2] — 2026-07-15
 ### Fixed
 - **Leads CSV export came out as gibberish.** The export ran inside the admin page

@@ -371,7 +371,20 @@ class M360_Chatbot_API {
 
         $sent = wp_mail( $to, $subject, $body, $headers );
 
-        return new WP_REST_Response( [ 'success' => true, 'mail_sent' => (bool) $sent ], 200 );
+        $resp = [ 'success' => true, 'mail_sent' => (bool) $sent ];
+        // Routing self-check (only when explicitly requested — used by the QA test harness,
+        // never sent by the normal widget). Exposes the resolved branch/department + CRM status.
+        if ( $request->get_param( '_routecheck' ) ) {
+            $resp['routing'] = [
+                'lead_type'     => $lead_type,
+                'department_id' => $route['department_id'],
+                'department'    => $route['department_name'],
+                'branch'        => $route['home_name'],
+                'home_id'       => $route['home_id'],
+                'crm'           => $crm['status'],   // sent | disabled | not_configured | failed:… | error:…
+            ];
+        }
+        return new WP_REST_Response( $resp, 200 );
     }
 
     /**
