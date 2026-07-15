@@ -250,8 +250,13 @@ class Wisply_Chatbot_API {
         $summary  = $this->ai->summarize_conversation( $ctx_rows, $lang ); // FR-007 auto-summary
         $now      = current_time( 'mysql' );
 
-        // Classify the inquiry: job-seeker vs. marketing lead
-        $lead_type = $this->classify_lead_type( $context . ' ' . $interest . ' ' . $department . ' ' . $message );
+        // Classify the inquiry: job-seeker vs. marketing lead — from the VISITOR's words only,
+        // never the bot's replies (which may quote site content and cause a false job match).
+        $user_said = implode( ' ', array_map(
+            static fn( $r ) => (string) ( $r['content'] ?? '' ),
+            array_filter( $ctx_rows, static fn( $r ) => ( $r['role'] ?? '' ) === 'user' )
+        ) );
+        $lead_type = $this->classify_lead_type( $user_said . ' ' . $interest . ' ' . $department . ' ' . $message );
 
         // Save the lead with the full data model (section 12)
         $leads   = get_option( 'wisply_leads', [] );

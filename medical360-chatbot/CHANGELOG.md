@@ -3,6 +3,14 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [4.6.4] — 2026-07-15
+### Fixed
+- **False "job-seeker" classification.** The marketing-vs-job classifier scanned the whole
+  transcript including the bot's replies, which sometimes quote site content mentioning
+  קריירה/דרושים — so a genuine patient inquiry (e.g. שיקום גריאטרי) could be misrouted to the
+  recruitment department. Now it classifies from the **visitor's own messages only**. Verified
+  end-to-end against the live site (all departments route correctly).
+
 ## [4.6.3] — 2026-07-15
 ### Added
 - **Routing self-check** — the `/lead` endpoint returns the resolved branch/department +

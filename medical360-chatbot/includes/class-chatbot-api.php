@@ -248,8 +248,14 @@ class M360_Chatbot_API {
         $context  = $this->format_lead_context( $ctx_rows );
         $interest = $this->lead_interest( $ctx_rows );          // last thing the user asked about
         $summary  = $this->ai->summarize_conversation( $ctx_rows, $lang ); // FR-007 auto-summary
-        // Classify: job-seeker vs marketing inquiry (from the conversation + interest + dept)
-        $lead_type = $this->classify_lead_type( $context . ' ' . $interest . ' ' . $department . ' ' . $message );
+        // Classify: job-seeker vs marketing inquiry — from the VISITOR's words only, never
+        // the bot's replies (which may quote site content mentioning קריירה/דרושים and would
+        // otherwise misroute a genuine patient inquiry to the recruitment department).
+        $user_said = implode( ' ', array_map(
+            static fn( $r ) => (string) ( $r['content'] ?? '' ),
+            array_filter( $ctx_rows, static fn( $r ) => ( $r['role'] ?? '' ) === 'user' )
+        ) );
+        $lead_type = $this->classify_lead_type( $user_said . ' ' . $interest . ' ' . $department . ' ' . $message );
         // Route to the correct Logicare branch (סניף) + department (מחלקה) by page
         $page_title_param = sanitize_text_field( (string) $request->get_param( 'page_title' ) );
         $route     = $this->resolve_logicare_route( $lead_type, $page_title_param, $department );

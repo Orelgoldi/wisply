@@ -3,6 +3,12 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [2.4.2] — 2026-07-15
+### Fixed
+- **False "job-seeker" classification** — the marketing-vs-job classifier scanned the bot's
+  replies too (which may quote site content), causing false job matches. Now it classifies
+  from the visitor's own messages only.
+
 ## [2.4.1] — 2026-07-15
 ### Fixed
 - **Leads CSV export came out as gibberish** — moved the export to an early `admin_init`
