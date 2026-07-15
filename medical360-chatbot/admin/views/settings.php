@@ -27,7 +27,7 @@ if ( isset( $_POST['m360_settings_nonce'] ) ) {
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'logicare_enabled', 'logicare_base_url', 'logicare_api_key',
-            'logicare_default_branch', 'logicare_job_branch', 'logicare_job_department', 'logicare_routing_rules',
+            'logicare_default_department_id', 'logicare_job_department_id', 'logicare_routing_rules',
             'report_recipients', 'report_daily', 'report_weekly',
         ];
         // Checkboxes don't POST when unchecked — normalise to 0/1
@@ -438,21 +438,20 @@ function m360_sel( string $key, string $val ): string {
             </tr>
         </table>
 
-        <h2>🧭 ניתוב לידים לסניף ומחלקה (Logicare)</h2>
+        <h2>🧭 ניתוב לידים למחלקה בלוגיקר</h2>
         <table class="form-table">
             <tr>
-                <th>סניף ברירת מחדל</th>
+                <th>מחלקת ברירת מחדל (מזהה)</th>
                 <td>
-                    <input type="text" name="logicare_default_branch" class="regular-text" value="<?php echo m360_v('logicare_default_branch'); ?>">
-                    <p class="description">הסניף שאליו ינותב ליד אם אף כלל התאמה לא נמצא. חייב להיות זהה לשם הסניף ב-Logicare (השדה "הופנה לסניף").</p>
+                    <input type="number" name="logicare_default_department_id" class="small-text" dir="ltr" value="<?php echo m360_v('logicare_default_department_id'); ?>">
+                    <p class="description">מזהה המחלקה שאליה ינותב ליד אם אף כלל לא התאים. הסניף נגזר אוטומטית מהמחלקה.</p>
                 </td>
             </tr>
             <tr>
-                <th>ניתוב דרושים 💼</th>
+                <th>מזהה מחלקת דרושים 💼</th>
                 <td>
-                    סניף: <input type="text" name="logicare_job_branch" class="regular-text" value="<?php echo m360_v('logicare_job_branch'); ?>"><br>
-                    מחלקה: <input type="text" name="logicare_job_department" class="regular-text" value="<?php echo m360_v('logicare_job_department'); ?>" style="margin-top:6px">
-                    <p class="description">כל פנייה שסווגה כ"חיפוש עבודה" תנותב לכאן — בלי קשר לדף שממנו הגיעה.</p>
+                    <input type="number" name="logicare_job_department_id" class="small-text" dir="ltr" value="<?php echo m360_v('logicare_job_department_id'); ?>">
+                    <p class="description">כל פנייה שסווגה כ"חיפוש עבודה" תנותב לכאן — בלי קשר לדף (ברירת מחדל: 263 — מדיקל קר - דרושים).</p>
                 </td>
             </tr>
             <tr>
@@ -460,10 +459,42 @@ function m360_sel( string $key, string $val ): string {
                 <td>
                     <textarea name="logicare_routing_rules" rows="14" class="large-text" dir="rtl" style="font-family:monospace;line-height:1.7"><?php echo esc_textarea( $settings['logicare_routing_rules'] ?? '' ); ?></textarea>
                     <p class="description">
-                        שורה לכל כלל, בפורמט: <code>מילת מפתח בדף | סניף | מחלקה</code>.
-                        הכלל הראשון שמילת המפתח שלו מופיעה בכותרת הדף/המחלקה — מנצח (סדרו כללים ספציפיים למעלה).
-                        שורה שמתחילה ב-<code>#</code> היא הערה. שמות הסניף והמחלקה חייבים להיות <strong>זהים בדיוק</strong> לשמות ב-Logicare.
+                        שורה לכל כלל, בפורמט: <code>מילת מפתח בדף | מזהה מחלקה | שם מחלקה (לתיעוד)</code>.
+                        הכלל הראשון שמילת המפתח שלו מופיעה בכותרת הדף — מנצח (סדרו כללים ספציפיים למעלה).
+                        שורה שמתחילה ב-<code>#</code> היא הערה. <strong>המזהה קובע גם את הסניף</strong> (כל מחלקה משויכת לסניף קבוע).
                     </p>
+                    <details style="margin-top:10px">
+                        <summary style="cursor:pointer;color:#007878;font-weight:600">📋 טבלת מזהי המחלקות ב-Logicare (לחצו להצגה)</summary>
+                        <table class="widefat striped" style="margin-top:8px;max-width:640px">
+                            <thead><tr><th>מזהה</th><th>מחלקה</th><th>סניף</th></tr></thead>
+                            <tbody style="font-size:13px">
+                                <?php
+                                $ref = [
+                                    [216,'מחלקות אשפוז','מדיקל קר - בית חולים'],
+                                    [200,'שיקום גריאטרי','מדיקל קר - בית חולים'],
+                                    [198,'סיעודי מורכב א','מדיקל קר - בית חולים'],
+                                    [297,'סיעודי מורכב ב','מדיקל קר - בית חולים'],
+                                    [197,'סיעודי','מדיקל קר - בית חולים'],
+                                    [243,'שיקום יום','מדיקל קר - בית חולים'],
+                                    [202,'החלמה','מדיקל קר - בית חולים'],
+                                    [217,'פרא רפואי','מדיקל קר - בית חולים'],
+                                    [267,'חוסן - צור קשר','מדיקל קר - בית חולים'],
+                                    [263,'מדיקל קר - דרושים','מדיקל קר - בית חולים'],
+                                    [199,'מונשמים','מדיקל קר - בית חולים'],
+                                    [201,'שיקום צעירים 7','מדיקל קר - בית חולים'],
+                                    [253,'שיקום צעירים 4','מדיקל קר - בית חולים'],
+                                    [241,'חיילים','בית פז סדנאות'],
+                                    [189,'חוסן','בית פז סדנאות'],
+                                    [141,'החלמה','בית פז סדנאות'],
+                                    [220,'פרא רפואי','בית פז סדנאות'],
+                                ];
+                                foreach ( $ref as $r ) {
+                                    echo '<tr><td dir="ltr">' . $r[0] . '</td><td>' . esc_html( $r[1] ) . '</td><td>' . esc_html( $r[2] ) . '</td></tr>';
+                                }
+                                ?>
+                            </tbody>
+                        </table>
+                    </details>
                 </td>
             </tr>
         </table>

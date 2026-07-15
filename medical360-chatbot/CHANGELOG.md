@@ -3,6 +3,16 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [4.6.1] — 2026-07-15
+### Changed
+- **Routing now uses real Logicare department IDs** (from the CRM export "סניפים ומחלקות")
+  instead of free-text names. Each `department_id` also fixes the branch (סניף), so routing
+  is unambiguous. Embedded department catalog (id → name + branch) drives the lead push,
+  which now sends `department_id` (primary) + name + `home_id`/branch under several key
+  variants. Rules format is now `keyword | department_id | (name for reference)`; settings
+  are `logicare_default_department_id` (216) + `logicare_job_department_id` (263 — דרושים).
+  The settings screen shows a collapsible reference table of the department IDs.
+
 ## [4.6.0] — 2026-07-14
 ### Added
 - **Logicare branch + department routing** — each lead is now routed to the correct

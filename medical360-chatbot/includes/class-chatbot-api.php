@@ -284,8 +284,9 @@ class M360_Chatbot_API {
             'conversation_length'=> count( $ctx_rows ),
             'lead_status'        => 'new',
             'lead_type'          => $lead_type,   // 'job' | 'marketing'
-            'crm_branch'         => $route['branch'],      // Logicare סניף
-            'crm_department'     => $route['department'],  // Logicare מחלקה
+            'crm_department_id'  => $route['department_id'],    // Logicare מחלקה (id)
+            'crm_department'     => $route['department_name'],  // Logicare מחלקה (שם)
+            'crm_branch'         => $route['home_name'],        // Logicare סניף
         ];
         // Push to the Logicare CRM (if configured) and record the outcome on the lead
         $crm = $this->send_to_logicare( [
@@ -293,7 +294,7 @@ class M360_Chatbot_API {
             'summary' => $summary, 'context' => $context, 'interest' => $interest,
             'source' => $source, 'campaign' => $utm_campaign,
             'landing_name' => $department,
-            'branch' => $route['branch'], 'department' => $route['department'],
+            'route' => $route,
         ] );
         $leads[ array_key_last( $leads ) ]['logicare'] = $crm['status'];
 
@@ -392,43 +393,79 @@ class M360_Chatbot_API {
     }
 
     /**
-     * Decide which Logicare branch (סניף) + department (מחלקה) a lead belongs to,
-     * based on the page it came from — driven by an admin-editable routing table.
-     *
-     * Rules setting `logicare_routing_rules`: one rule per line, pipe-separated:
-     *   keyword | branch | department
+     * Logicare department catalog (from the CRM export "סניפים ומחלקות").
+     * id => [ name, home_id (branch id), home (branch name) ].
+     * Each department belongs to a fixed branch, so a department_id fully determines
+     * the branch (סניף) too. Update this if departments change in Logicare.
+     */
+    private const LOGICARE_DEPARTMENTS = [
+        // מדיקל קר - בית חולים (home 179)
+        202 => [ 'name' => 'החלמה',                    'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        264 => [ 'name' => 'החלמה לאחר ניתוח',         'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        266 => [ 'name' => 'החלמה- לב',                'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        265 => [ 'name' => 'החלמה-סכרת',               'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        267 => [ 'name' => 'חוסן - צור קשר',           'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        218 => [ 'name' => 'כללי לא מסווג',            'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        263 => [ 'name' => 'מדיקל קר - דרושים',        'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        199 => [ 'name' => 'מונשמים',                  'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        216 => [ 'name' => 'מחלקות אשפוז',             'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        197 => [ 'name' => 'סיעודי',                   'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        198 => [ 'name' => 'סיעודי מורכב א',           'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        297 => [ 'name' => 'סיעודי מורכב ב',           'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        217 => [ 'name' => 'פרא רפואי',                'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        200 => [ 'name' => 'שיקום גריאטרי',            'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        243 => [ 'name' => 'שיקום יום',                'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        253 => [ 'name' => 'שיקום צעירים 4',           'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        201 => [ 'name' => 'שיקום צעירים 7',           'home_id' => 179, 'home' => 'מדיקל קר - בית חולים' ],
+        // בית פז סדנאות (home 8)
+        141 => [ 'name' => 'החלמה',                    'home_id' => 8,   'home' => 'בית פז סדנאות' ],
+        189 => [ 'name' => 'חוסן',                     'home_id' => 8,   'home' => 'בית פז סדנאות' ],
+        241 => [ 'name' => 'חיילים',                   'home_id' => 8,   'home' => 'בית פז סדנאות' ],
+        220 => [ 'name' => 'פרא רפואי',                'home_id' => 8,   'home' => 'בית פז סדנאות' ],
+    ];
+
+    /** Build the routing record for a department id (name + branch, from the catalog). */
+    private function logicare_department_record( string $id, string $name_override = '' ): array {
+        $rec = self::LOGICARE_DEPARTMENTS[ (int) $id ] ?? null;
+        return [
+            'department_id'   => $id,
+            'department_name' => $name_override !== '' ? $name_override : ( $rec['name'] ?? '' ),
+            'home_id'         => $rec ? (string) $rec['home_id'] : '',
+            'home_name'       => $rec['home'] ?? '',
+        ];
+    }
+
+    /**
+     * Decide which Logicare department (מחלקה) a lead belongs to, based on the page —
+     * driven by an admin-editable routing table. The branch (סניף) follows from the
+     * department. Rules setting `logicare_routing_rules`: one rule per line:
+     *   keyword | department_id            (or)  keyword | department_id | department_name
      * First rule whose keyword appears in the page title/department wins. Lines
      * starting with # are comments. Job-seekers route to the recruitment department.
      */
     private function resolve_logicare_route( string $lead_type, string $page_title, string $department ): array {
-        $default_branch = trim( (string) $this->db->get_setting( 'logicare_default_branch', '' ) );
-        $hay = mb_strtolower( trim( $page_title . ' ' . $department ) );
+        $default_id = trim( (string) $this->db->get_setting( 'logicare_default_department_id', '' ) );
 
         // Job-seekers always go to the recruitment (דרושים) department
         if ( $lead_type === 'job' ) {
-            $jd = trim( (string) $this->db->get_setting( 'logicare_job_department', '' ) );
-            if ( $jd !== '' ) {
-                $jb = trim( (string) $this->db->get_setting( 'logicare_job_branch', '' ) );
-                return [ 'branch' => ( $jb !== '' ? $jb : $default_branch ), 'department' => $jd ];
-            }
+            $jid = trim( (string) $this->db->get_setting( 'logicare_job_department_id', '' ) );
+            if ( $jid !== '' ) return $this->logicare_department_record( $jid );
         }
 
+        $hay = mb_strtolower( trim( $page_title . ' ' . $department ) );
         $rules = (string) $this->db->get_setting( 'logicare_routing_rules', '' );
         foreach ( preg_split( '/\r\n|\r|\n/', $rules ) as $line ) {
             $line = trim( $line );
             if ( $line === '' || $line[0] === '#' ) continue;
             $parts = array_map( 'trim', explode( '|', $line ) );
-            if ( count( $parts ) < 3 ) continue;
+            if ( count( $parts ) < 2 || $parts[1] === '' ) continue;
             $kw = mb_strtolower( $parts[0] );
             if ( $kw !== '' && mb_strpos( $hay, $kw ) !== false ) {
-                return [
-                    'branch'     => ( $parts[1] !== '' ? $parts[1] : $default_branch ),
-                    'department' => $parts[2],
-                ];
+                return $this->logicare_department_record( $parts[1], $parts[2] ?? '' );
             }
         }
-        // No rule matched — fall back to the default branch + the raw page department
-        return [ 'branch' => $default_branch, 'department' => $department ];
+        // No rule matched — fall back to the default department
+        return $this->logicare_department_record( $default_id );
     }
 
     /**
@@ -450,11 +487,15 @@ class M360_Chatbot_API {
             $details .= ( $details !== '' ? "\n\n" : '' ) . $lead['context'];
         }
 
-        // Route the lead to the right Logicare branch (סניף) + department (מחלקה).
-        // Both field-name variants are sent so whichever the Zapier endpoint maps wins;
-        // unmapped keys are ignored by Logicare.
-        $branch = trim( (string) ( $lead['branch'] ?? '' ) );
-        $dept   = trim( (string) ( $lead['department'] ?? '' ) );
+        // Route the lead to the right Logicare department (מחלקה) + branch (סניף).
+        // The department_id is primary (it also fixes the branch); name + home fields
+        // are sent under several key variants so whichever the Zapier endpoint maps
+        // wins. Unmapped keys are ignored by Logicare.
+        $route     = is_array( $lead['route'] ?? null ) ? $lead['route'] : [];
+        $dept_id   = trim( (string) ( $route['department_id'] ?? '' ) );
+        $dept_name = trim( (string) ( $route['department_name'] ?? '' ) );
+        $home_id   = trim( (string) ( $route['home_id'] ?? '' ) );
+        $home_name = trim( (string) ( $route['home_name'] ?? '' ) );
 
         $payload = [
             'api_key'         => $key,
@@ -465,16 +506,22 @@ class M360_Chatbot_API {
             'referrer'        => (string) ( $lead['source'] ?? '' ) ?: 'בוט האתר',
             'campaign'        => (string) ( $lead['campaign'] ?? '' ),
             'landing'         => (string) ( $lead['landing_name'] ?? '' ),
-            'department_name' => $dept,
-            'department'      => $dept,
-            'branch_name'     => $branch,
-            'branch'          => $branch,
+            // Department (מחלקה) — id is primary, name variants as fallback
+            'department_id'   => $dept_id,
+            'department'      => $dept_id,
+            'department_name' => $dept_name,
+            // Branch / home (סניף) — derived from the department
+            'home_id'         => $home_id,
+            'branch_id'       => $home_id,
+            'home_name'       => $home_name,
+            'branch_name'     => $home_name,
+            'branch'          => $home_name,
         ];
         if ( ! empty( $lead['email'] ) && is_email( $lead['email'] ) ) {
             $payload['email'] = $lead['email'];
         }
         // Drop empty optional fields (keep required ones)
-        foreach ( [ 'referrer_notes', 'campaign', 'landing', 'department_name', 'department', 'branch_name', 'branch' ] as $opt ) {
+        foreach ( [ 'referrer_notes', 'campaign', 'landing', 'department_id', 'department', 'department_name', 'home_id', 'branch_id', 'home_name', 'branch_name', 'branch' ] as $opt ) {
             if ( ( $payload[ $opt ] ?? '' ) === '' ) unset( $payload[ $opt ] );
         }
 
