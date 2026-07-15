@@ -3,7 +3,7 @@
  * Plugin Name:       Wisply — AI Chat Assistant
  * Plugin URI:        https://goldstein.studio
  * Description:       White-label AI chat assistant (text + voice) for any website. Answers in Hebrew, English & Russian based only on your own site content. Set your bot name, branding, colours and persona — no code.
- * Version:           2.6.0
+ * Version:           2.7.0
  * Requires at least: 6.0
  * Requires PHP:      8.1
  * Author:            Goldstein Studio
@@ -15,15 +15,18 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'WISPLY_VERSION',     '2.6.0' );
+define( 'WISPLY_VERSION',     '2.7.0' );
 define( 'WISPLY_PLUGIN_FILE', __FILE__ );
 define( 'WISPLY_PLUGIN_DIR',  plugin_dir_path( __FILE__ ) );
 define( 'WISPLY_PLUGIN_URL',  plugin_dir_url( __FILE__ ) );
 define( 'WISPLY_TEXT_DOMAIN', 'wisply-chatbot' );
 // White-label product name (shown in admin menu + "Powered by"). Change to rebrand.
 defined( 'WISPLY_PRODUCT_NAME' ) || define( 'WISPLY_PRODUCT_NAME', 'Wisply' );
+// Licence + auto-update server. Override in wp-config.php while wisply.co.il is not live.
+defined( 'WISPLY_API_URL' ) || define( 'WISPLY_API_URL', 'https://wisply.vercel.app' );
 
 require_once WISPLY_PLUGIN_DIR . 'includes/class-database.php';
+require_once WISPLY_PLUGIN_DIR . 'includes/class-license.php';
 require_once WISPLY_PLUGIN_DIR . 'includes/class-woo.php';
 require_once WISPLY_PLUGIN_DIR . 'includes/class-ai-handler.php';
 require_once WISPLY_PLUGIN_DIR . 'includes/class-content-indexer.php';
@@ -47,6 +50,7 @@ add_action( 'plugins_loaded', function () {
         update_option( 'wisply_db_version', WISPLY_VERSION );
     }
 
+    Wisply_License::get_instance();
     Wisply_Chatbot_API::get_instance();
     Wisply_Admin::get_instance();
 
@@ -59,6 +63,14 @@ add_action( 'plugins_loaded', function () {
 } );
 
 function wisply_enqueue_public_assets(): void {
+    // Same gate as the widget. Hiding only the div we print is not enough: the JS
+    // also adopts a #wisply-root / #wisply-chatbot-root that came from the theme or a
+    // page builder, and would then build a bot whose every request 403s in front of a
+    // visitor. No licence → ship no script and no config at all.
+    if ( class_exists( 'Wisply_License' ) && ! Wisply_License::get_instance()->is_valid() ) {
+        return;
+    }
+
     // The CSS is injected INTO the Shadow DOM by the JS (not enqueued on the page),
     // so theme styles cannot leak in. We only need the URL.
     wp_enqueue_script(
@@ -99,6 +111,13 @@ function wisply_js_strings(): array {
 }
 
 function wisply_render_widget(): void {
+    // No licence, no widget. Better a clean absence than a bubble that opens and
+    // then 403s in a visitor's face. is_valid() fails open unless the server has
+    // explicitly rejected the key and the grace window has run out.
+    if ( class_exists( 'Wisply_License' ) && ! Wisply_License::get_instance()->is_valid() ) {
+        return;
+    }
+
     $settings = Wisply_Database::get_instance()->get_widget_settings();
 
     // Detect the current page's title + department so the bot can offer page-specific

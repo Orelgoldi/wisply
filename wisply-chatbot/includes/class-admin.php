@@ -215,6 +215,7 @@ class Wisply_Admin {
         if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( 'Unauthorized', 403 );
 
         $allowed     = [
+            'license_key',
             'ai_provider', 'ai_api_key', 'ai_model',
             'openai_api_key', 'openai_model',
             'primary_color', 'secondary_color', 'font_family', 'bubble_position',

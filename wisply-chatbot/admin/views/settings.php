@@ -12,6 +12,7 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
         $save_error = 'אין הרשאה.';
     } else {
         $allowed     = [
+            'license_key',
             // White-label persona
             'bot_name', 'business_name', 'business_type', 'business_description', 'action_buttons',
             'suggested_questions_he', 'suggested_questions_en', 'suggested_questions_ru',
@@ -55,12 +56,19 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
         $_POST['woo_visual_search'] = isset( $_POST['woo_visual_search'] ) ? '1' : '0';
         $secret_keys = [ 'ai_api_key', 'openai_api_key' ];
         $db          = Wisply_Database::get_instance();
+        // Remember the licence key we had, so a NEW one can be activated after saving
+        $license_before = strtoupper( trim( (string) $db->get_setting( 'license_key', '' ) ) );
 
         foreach ( $allowed as $key ) {
             if ( ! isset( $_POST[ $key ] ) ) continue;
             // CTA buttons arrive as a JSON string — validate, then re-encode cleanly
             if ( $key === 'action_buttons' ) {
                 $db->set_setting( 'action_buttons', wisply_sanitize_action_buttons( (string) wp_unslash( $_POST['action_buttons'] ) ) );
+                continue;
+            }
+            // Licence keys are always uppercase — "wsp-…" pasted by a customer still works
+            if ( $key === 'license_key' ) {
+                $db->set_setting( 'license_key', strtoupper( trim( sanitize_text_field( (string) wp_unslash( $_POST['license_key'] ) ) ) ) );
                 continue;
             }
             $val = in_array( $key, $textarea_keys, true )
@@ -70,6 +78,19 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
             if ( in_array( $key, $secret_keys, true ) && empty( $val ) ) continue;
             $db->set_setting( $key, $val );
         }
+
+        // Re-activate on EVERY save with a non-empty key — not only when it changed.
+        // The admin notice tells a locked-out owner to "check the key in settings", so
+        // Save has to actually be the retry button that promise implies. Gating this on
+        // a changed key made it a no-op precisely for the person whose key is already
+        // correct and whose bot is down. license_activate is idempotent for a site it
+        // knows (on conflict → touch last_seen_at), so the extra round-trip is free.
+        $license_after = strtoupper( trim( (string) $db->get_setting( 'license_key', '' ) ) );
+        if ( $license_after !== '' && class_exists( 'Wisply_License' ) ) {
+            Wisply_License::get_instance()->activate( $license_after );
+        }
+        unset( $license_before );
+
         $saved = true;
     }
 }
@@ -684,6 +705,33 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
         </table>
 
         </div><div class="wisply-pane" data-pane="advanced">
+        <h2>🔑 רישיון</h2>
+        <table class="form-table">
+            <tr>
+                <th>מפתח רישיון</th>
+                <td>
+                    <input type="text" name="license_key" dir="ltr" class="regular-text"
+                           placeholder="WSP-XXXX-XXXX-XXXX-XXXX"
+                           value="<?php echo wisply_v('license_key'); ?>">
+                    <?php
+                    $lic_status = $settings['license_status'] ?? '';
+                    $lic_msg    = (string) ( $settings['license_message'] ?? '' );
+                    if ( $lic_status === 'active' ) : ?>
+                        <p style="color:#0a7a30;font-weight:600;margin:8px 0 0">✅ הרישיון פעיל</p>
+                    <?php elseif ( $lic_status === 'invalid' ) : ?>
+                        <p style="color:#c0392b;font-weight:600;margin:8px 0 0">❌ <?php echo esc_html( $lic_msg !== '' ? $lic_msg : 'הרישיון לא אומת מול השרת.' ); ?></p>
+                    <?php else : ?>
+                        <p style="color:#666;margin:8px 0 0">המפתח יאומת מול השרת אחרי שמירה.</p>
+                    <?php endif; ?>
+                    <p class="description">
+                        מפתח הרישיון מפעיל עדכונים אוטומטיים של התוסף ישירות מלוח הבקרה של וורדפרס,
+                        והוא צמוד למספר האתרים שנכללים בחבילה שרכשתם. שימוש באותו מפתח ביותר אתרים
+                        ממה שהחבילה מאפשרת לא יאושר.
+                    </p>
+                </td>
+            </tr>
+        </table>
+
         <h2>🗑️ שמירת נתונים</h2>
         <table class="form-table">
             <tr>

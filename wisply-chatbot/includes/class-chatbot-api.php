@@ -175,10 +175,24 @@ class Wisply_Chatbot_API {
     }
 
     /**
-     * Rate limit + origin check for all public endpoints.
+     * Licence + rate limit + origin check for all public endpoints.
      * Limit: 20 requests / 60 s per IP (chat is expensive, lead is spam-prone).
+     *
+     * Every public route hangs off this one callback, which makes it the single
+     * choke point for the licence. Admin routes use admin_check() and are never
+     * gated — the owner must always be able to reach the settings screen and fix
+     * their key. Wisply_License::is_valid() fails open on anything short of an
+     * explicit rejection, so this cannot fire because our server had a bad day.
      */
     public function rate_limit_check( WP_REST_Request $request ): bool|WP_Error {
+        if ( class_exists( 'Wisply_License' ) && ! Wisply_License::get_instance()->is_valid() ) {
+            return new WP_Error(
+                'license_inactive',
+                'הרישיון של הבוט אינו פעיל.',
+                [ 'status' => 403 ]
+            );
+        }
+
         if ( ! $this->origin_allowed() ) {
             return new WP_Error( 'forbidden_origin', 'Forbidden', [ 'status' => 403 ] );
         }
