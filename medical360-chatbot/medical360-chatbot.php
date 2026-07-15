@@ -3,7 +3,7 @@
  * Plugin Name:       Medical360 AI Chatbot
  * Plugin URI:        https://medical360.org
  * Description:       צ׳אט AI חכם לאתר medical360.org — עונה בעברית, אנגלית ורוסית על בסיס תוכן האתר בלבד.
- * Version:           4.6.1
+ * Version:           4.6.2
  * Requires at least: 6.0
  * Requires PHP:      8.1
  * Author:            Orel Goldstein Studio
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'M360_VERSION',     '4.6.1' );
+define( 'M360_VERSION',     '4.6.2' );
 define( 'M360_PLUGIN_FILE', __FILE__ );
 define( 'M360_PLUGIN_DIR',  plugin_dir_path( __FILE__ ) );
 define( 'M360_PLUGIN_URL',  plugin_dir_url( __FILE__ ) );

@@ -3,6 +3,15 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [2.4.1] — 2026-07-15
+### Fixed
+- **Leads CSV export came out as gibberish** — moved the export to an early `admin_init`
+  handler (before any HTML output) with a clean UTF-8 BOM so Excel reads Hebrew correctly.
+### Changed
+- **Export columns now mirror the on-screen leads table** (תאריך, שם, סוג, טלפון, אימייל,
+  התעניינות, סיכום, מחלקה, שיחה מלאה, מקור, קמפיין, Opt-In). Newlines inside a cell are
+  collapsed so each lead stays on one row.
+
 ## [2.4.0] — 2026-07-14
 ### Removed
 - **Logicare CRM integration removed entirely.** Logicare is a client-specific Israeli

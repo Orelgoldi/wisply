@@ -10,6 +10,9 @@ class M360_Admin {
         $this->db = M360_Database::get_instance();
         add_action( 'admin_menu',             [ $this, 'register_menu' ] );
         add_action( 'admin_enqueue_scripts',  [ $this, 'enqueue_assets' ] );
+        // Leads CSV export — must run BEFORE any admin HTML is printed, otherwise the
+        // download headers fail (headers already sent) and the file comes out as garbage.
+        add_action( 'admin_init',             [ $this, 'maybe_export_leads' ] );
         // admin-ajax handlers (bypass REST API entirely — more reliable on restrictive hosts)
         add_action( 'wp_ajax_m360_save_settings', [ $this, 'ajax_save_settings' ] );
         add_action( 'wp_ajax_m360_reindex',        [ $this, 'ajax_reindex' ] );
@@ -149,6 +152,60 @@ class M360_Admin {
     public function page_leads(): void {
         $this->no_cache();
         require M360_PLUGIN_DIR . 'admin/views/leads.php';
+    }
+
+    /**
+     * Stream the leads as a CSV (Excel-friendly, UTF-8 BOM) — columns mirror the
+     * on-screen leads table. Runs on admin_init so the download headers are sent
+     * before any HTML output (otherwise Excel shows gibberish).
+     */
+    public function maybe_export_leads(): void {
+        if ( ( $_GET['page'] ?? '' ) !== 'medical360-leads' || ! isset( $_GET['export'] ) ) return;
+        if ( ! current_user_can( 'manage_options' ) ) return;
+
+        $type_labels = [ 'marketing' => 'שיווקי', 'job' => 'דרושים' ];
+        $type_filter = in_array( $_GET['type'] ?? '', [ 'marketing', 'job' ], true ) ? $_GET['type'] : '';
+
+        $leads = array_reverse( (array) get_option( 'm360_leads', [] ) ); // newest first
+        if ( $type_filter !== '' ) {
+            $leads = array_values( array_filter(
+                $leads, fn( $l ) => ( $l['lead_type'] ?? 'marketing' ) === $type_filter
+            ) );
+        }
+
+        // Keep every lead on a single row: collapse newlines inside a cell
+        $cell = static fn( $v ) => str_replace(
+            '"', '""',
+            trim( (string) preg_replace( '/[\r\n]+/u', ' / ', (string) ( $v ?? '' ) ) )
+        );
+
+        while ( ob_get_level() > 0 ) { ob_end_clean(); }
+        nocache_headers();
+        $suffix = $type_filter ? '-' . $type_filter : '';
+        header( 'Content-Type: text/csv; charset=UTF-8' );
+        header( 'Content-Disposition: attachment; filename="medical360-leads' . $suffix . '-' . date( 'Y-m-d' ) . '.csv"' );
+
+        echo "\xEF\xBB\xBF"; // UTF-8 BOM so Excel reads Hebrew correctly
+        // Columns mirror the on-screen table
+        echo "תאריך,שם,סוג,טלפון,אימייל,התעניינות,סיכום,מחלקה,שיחה מלאה,מקור,קמפיין,Opt-In\n";
+        foreach ( $leads as $l ) {
+            $row = [
+                $l['time'] ?? '',
+                $l['name'] ?? '',
+                $type_labels[ $l['lead_type'] ?? 'marketing' ] ?? 'שיווקי',
+                $l['phone'] ?? '',
+                $l['email'] ?? '',
+                $l['interest'] ?? '',
+                $l['summary'] ?? '',
+                $l['department'] ?? '',
+                $l['context'] ?? ( $l['message'] ?? '' ),
+                $l['source'] ?? '',
+                $l['campaign'] ?? '',
+                ! empty( $l['marketing_consent'] ) ? 'כן' : 'לא',
+            ];
+            echo '"' . implode( '","', array_map( $cell, $row ) ) . "\"\n";
+        }
+        exit;
     }
 
     // ─── admin-ajax handlers ──────────────────────────────────────────────────

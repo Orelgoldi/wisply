@@ -3,6 +3,17 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [4.6.2] — 2026-07-15
+### Fixed
+- **Leads CSV export came out as gibberish.** The export ran inside the admin page
+  render (after WordPress already printed HTML), so the download headers failed and the
+  CSV was mixed into the page. Moved it to an early `admin_init` handler with a clean
+  UTF-8 BOM so Excel reads Hebrew correctly.
+### Changed
+- **Export columns now mirror the on-screen leads table** (תאריך, שם, סוג, טלפון, אימייל,
+  התעניינות, סיכום, מחלקה, שיחה מלאה, מקור, קמפיין, Opt-In) instead of the old 20-column
+  technical dump. Newlines inside a cell are collapsed so each lead stays on one row.
+
 ## [4.6.1] — 2026-07-15
 ### Changed
 - **Routing now uses real Logicare department IDs** (from the CRM export "סניפים ומחלקות")

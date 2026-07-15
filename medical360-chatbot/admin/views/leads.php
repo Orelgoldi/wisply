@@ -32,28 +32,9 @@ $leads = $type_filter === '' ? $leads_all : array_values( array_filter(
 ) );
 $total = count( $leads );
 
-// CSV export (respects the current type filter)
-if ( isset( $_GET['export'] ) && current_user_can( 'manage_options' ) ) {
-    $suffix = $type_filter ? '-' . $type_filter : '';
-    header( 'Content-Type: text/csv; charset=UTF-8' );
-    header( 'Content-Disposition: attachment; filename="medical360-leads' . $suffix . '-' . date( 'Y-m-d' ) . '.csv"' );
-    echo "\xEF\xBB\xBF";
-    echo "שם,טלפון,אימייל,סוג,התעניינות,סיכום שיחה,מחלקה,מקור,קמפיין,דף נחיתה,הסכמה שיווקית,גרסת הסכמה,זמן הסכמה,סטטוס,Logicare,אורך שיחה,הקשר מלא,שפה,תאריך,עמוד\n";
-    foreach ( $leads as $l ) {
-        echo '"' . implode( '","', array_map( fn( $v ) => str_replace( '"', '""', (string) ( $v ?? '' ) ), [
-            $l['name'] ?? '', $l['phone'] ?? '', $l['email'] ?? '',
-            $type_labels[ $l['lead_type'] ?? 'marketing' ] ?? 'שיווקי',
-            $l['interest'] ?? '', $l['summary'] ?? '', $l['department'] ?? '',
-            $l['source'] ?? '', $l['campaign'] ?? '', $l['landing_page'] ?? '',
-            ! empty( $l['marketing_consent'] ) ? 'כן' : 'לא',
-            $l['consent_version'] ?? '', $l['consent_time'] ?? '',
-            $l['lead_status'] ?? '', $l['logicare'] ?? '',
-            $l['conversation_length'] ?? '',
-            $l['context'] ?? '', $l['lang'] ?? '', $l['time'] ?? '', $l['page'] ?? '',
-        ] ) ) . "\"\n";
-    }
-    exit;
-}
+// NOTE: the CSV export itself is handled early on `admin_init` (M360_Admin::maybe_export_leads),
+// before any HTML is printed — otherwise the download headers fail and Excel shows gibberish.
+// The "⬇ ייצוא CSV" button below just links here with ?export=1 (+ the current type filter).
 ?>
 <div class="wrap m360-admin" dir="rtl" style="font-family:'Open Sans Hebrew',Arial,sans-serif">
     <h1 style="color:#00A3A3">לידים מהעוזר החכם</h1>
