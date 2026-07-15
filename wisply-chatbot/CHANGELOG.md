@@ -3,6 +3,28 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [2.5.0] — 2026-07-15
+### Added
+- **🛒 E-commerce module (WooCommerce).** The bot now answers about the real catalogue
+  using **live** data — no REST keys needed, it reads WooCommerce's PHP API in-process,
+  so prices and stock are always current.
+  - **Products, live prices, stock and variations.** Matching products are injected into
+    the AI context; the model is told to quote *only* that data. For variable products it
+    asks which option (size/colour) and answers with that variant's price/stock; if a
+    variant is out of stock it says so and offers an alternative.
+  - **Rich product cards in chat** — image, price (with sale strikethrough preserved),
+    stock badge and a link to the product, via a new `POST /products` route and a
+    `[PRODUCTS: id,id]` marker.
+  - **Similar products** — related items for the top hit are pulled in so the bot can
+    offer alternatives (especially when something is out of stock).
+  - **Shipping** — live WooCommerce shipping zones/rates, injected only when the visitor
+    actually asks about delivery (keeps prompts cheap).
+  - **Visual search (optional)** — the visitor uploads a photo, a vision model turns it
+    into search terms, and the bot returns matching products (`POST /product-image-search`).
+  - Settings under 📥 לידים: enable, max products (1–8), show stock, visual search.
+    Degrades safely: no WooCommerce installed → module simply stays off.
+  Note: this module is Wisply-only — it is intentionally not mirrored to Medical360.
+
 ## [2.4.2] — 2026-07-15
 ### Fixed
 - **False "job-seeker" classification** — the marketing-vs-job classifier scanned the bot's

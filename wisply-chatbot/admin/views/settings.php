@@ -31,6 +31,7 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'report_recipients', 'report_daily', 'report_weekly',
+            'woo_enabled', 'woo_max_products', 'woo_show_stock', 'woo_visual_search',
         ];
         // Multi-line fields must keep their newlines
         $textarea_keys = [
@@ -47,6 +48,9 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
         $_POST['consent_required']  = isset( $_POST['consent_required'] )  ? '1' : '0';
         $_POST['report_daily']      = isset( $_POST['report_daily'] )      ? '1' : '0';
         $_POST['report_weekly']     = isset( $_POST['report_weekly'] )     ? '1' : '0';
+        $_POST['woo_enabled']       = isset( $_POST['woo_enabled'] )       ? '1' : '0';
+        $_POST['woo_show_stock']    = isset( $_POST['woo_show_stock'] )    ? '1' : '0';
+        $_POST['woo_visual_search'] = isset( $_POST['woo_visual_search'] ) ? '1' : '0';
         $secret_keys = [ 'ai_api_key', 'openai_api_key' ];
         $db          = Wisply_Database::get_instance();
 
@@ -480,6 +484,54 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
                 <th>קישור סהר</th>
                 <td><input type="url" name="emergency_sahar_url" value="<?php echo wisply_v('emergency_sahar_url','https://sahar.org.il/'); ?>" class="regular-text" dir="ltr">
                     <p class="description">קווי סיוע נפשי שיוצגו ככפתורים בתגובת חירום.</p></td>
+            </tr>
+        </table>
+
+        <h2>🛒 מודול חנות (WooCommerce)</h2>
+        <?php if ( ! class_exists( 'WooCommerce' ) ) : ?>
+            <p class="description" style="color:#b32d2e">WooCommerce לא מותקן באתר — המודול לא יפעל.</p>
+        <?php endif; ?>
+        <table class="form-table">
+            <tr>
+                <th>הפעלה</th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="woo_enabled" value="1"
+                               <?php checked( ( $settings['woo_enabled'] ?? '0' ), '1' ); ?>>
+                        הפעל מענה על מוצרים מהחנות
+                    </label>
+                    <p class="description">הבוט יענה על מוצרים, מחירים, וריאציות ומלאי — נתונים חיים מ-WooCommerce.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>מספר מוצרים בתשובה</th>
+                <td>
+                    <input type="number" name="woo_max_products" min="1" max="8"
+                           value="<?php echo wisply_v('woo_max_products','4'); ?>" class="small-text">
+                    <p class="description">כמה כרטיסי מוצר יוצגו לכל היותר בתשובה אחת.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>הצגת מלאי</th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="woo_show_stock" value="1"
+                               <?php checked( ( $settings['woo_show_stock'] ?? '1' ), '1' ); ?>>
+                        הצג תגית מלאי בכרטיס המוצר
+                    </label>
+                    <p class="description">הצג תגית "במלאי / אזל" בכרטיס המוצר.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>חיפוש לפי תמונה</th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="woo_visual_search" value="1"
+                               <?php checked( ( $settings['woo_visual_search'] ?? '0' ), '1' ); ?>>
+                        אפשר חיפוש מוצרים לפי תמונה
+                    </label>
+                    <p class="description">הגולש מעלה תמונה והבוט מוצא מוצרים דומים (דורש מפתח OpenAI).</p>
+                </td>
             </tr>
         </table>
 

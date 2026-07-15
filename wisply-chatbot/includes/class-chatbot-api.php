@@ -110,6 +110,27 @@ class Wisply_Chatbot_API {
             ],
         ] );
 
+        // Public: hydrate product cards for the IDs the AI emitted in [PRODUCTS: ...]
+        register_rest_route( $ns, '/products', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'handle_products' ],
+            'permission_callback' => [ $this, 'rate_limit_check' ],
+            'args'                => [
+                'ids' => [ 'required' => true, 'type' => 'array', 'items' => [ 'type' => 'integer' ] ],
+            ],
+        ] );
+
+        // Public: visual product search — image in, matching products out
+        register_rest_route( $ns, '/product-image-search', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'handle_product_image_search' ],
+            'permission_callback' => [ $this, 'rate_limit_check' ],
+            'args'                => [
+                'image' => [ 'required' => true,  'type' => 'string' ], // base64 data URL
+                'lang'  => [ 'required' => false, 'type' => 'string', 'default' => 'he', 'sanitize_callback' => 'sanitize_text_field' ],
+            ],
+        ] );
+
         // Admin: get all conversations (requires manage_options)
         register_rest_route( $ns, '/admin/conversations', [
             'methods'             => 'GET',
@@ -517,6 +538,109 @@ class Wisply_Chatbot_API {
         }
         $questions = $this->ai->generate_page_questions( $title, $url, $lang );
         return new WP_REST_Response( [ 'questions' => $questions ], 200 );
+    }
+
+    // ─── Public: /products ────────────────────────────────────────────────────
+
+    public function handle_products( WP_REST_Request $request ): WP_REST_Response {
+        if ( ! class_exists( 'Wisply_Woo' ) || ! Wisply_Woo::get_instance()->is_active() ) {
+            return new WP_REST_Response( [ 'products' => [] ], 200 );
+        }
+
+        $ids = (array) $request->get_param( 'ids' );
+        $ids = array_values( array_filter( array_unique( array_map( 'absint', $ids ) ) ) );
+        $ids = array_slice( $ids, 0, 8 );
+
+        $woo      = Wisply_Woo::get_instance();
+        $products = array_values( array_filter( array_map(
+            static fn( $id ) => $woo->get_product( $id ),
+            $ids
+        ) ) );
+
+        return new WP_REST_Response( [ 'products' => $products ], 200 );
+    }
+
+    // ─── Public: /product-image-search ────────────────────────────────────────
+
+    public function handle_product_image_search( WP_REST_Request $request ): WP_REST_Response {
+        $enabled = $this->db->get_setting( 'woo_visual_search', '0' ) === '1';
+        if ( ! $enabled || ! class_exists( 'Wisply_Woo' ) || ! Wisply_Woo::get_instance()->is_active() ) {
+            return new WP_REST_Response( [ 'error' => 'disabled' ], 403 );
+        }
+
+        $image = (string) $request->get_param( 'image' );
+        $lang  = (string) $request->get_param( 'lang' );
+
+        if ( ! preg_match( '#^data:image/(jpeg|jpg|png|webp|gif);base64,#i', $image ) ) {
+            return new WP_REST_Response( [ 'error' => 'Invalid image' ], 400 );
+        }
+        // Cap at ~3 MB of image (base64 is ~33% larger than the bytes it encodes)
+        if ( strlen( $image ) > 4 * 1024 * 1024 ) {
+            return new WP_REST_Response( [ 'error' => 'Image too large' ], 400 );
+        }
+
+        $description = $this->describe_image( $image, $lang );
+        $products    = $description !== ''
+            ? Wisply_Woo::get_instance()->search_products( $description, 4 )
+            : [];
+
+        $reply = $products
+            ? 'מצאתי כמה מוצרים דומים למה שחיפשת:'
+            : 'לא מצאתי מוצר דומה בחנות. אפשר לתאר לי במילים מה אתה מחפש?';
+
+        return new WP_REST_Response( [
+            'reply'    => $reply,
+            'products' => $products,
+            'query'    => $description,
+        ], 200 );
+    }
+
+    /**
+     * Turns a product photo into short search keywords via OpenAI vision.
+     * Returns '' on any failure so the caller degrades to "no match found".
+     */
+    private function describe_image( string $data_url, string $lang ): string {
+        $api_key = (string) $this->db->get_setting( 'openai_api_key', '' );
+        if ( $api_key === '' ) {
+            return '';
+        }
+
+        $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', [
+            'timeout' => 30,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type'  => 'application/json',
+            ],
+            'body' => wp_json_encode( [
+                'model'      => 'gpt-4o-mini',
+                'max_tokens' => 60,
+                'messages'   => [ [
+                    'role'    => 'user',
+                    'content' => [
+                        [
+                            'type' => 'text',
+                            'text' => 'תאר את המוצר בתמונה במילות חיפוש קצרות (סוג הפריט, צבע, חומר, סגנון). החזר רק את מילות החיפוש.',
+                        ],
+                        [
+                            'type'      => 'image_url',
+                            'image_url' => [ 'url' => $data_url ],
+                        ],
+                    ],
+                ] ],
+            ] ),
+        ] );
+
+        if ( is_wp_error( $response ) || wp_remote_retrieve_response_code( $response ) !== 200 ) {
+            error_log( '[Wisply] Image description failed: ' . ( is_wp_error( $response )
+                ? $response->get_error_message()
+                : wp_remote_retrieve_body( $response ) ) );
+            return '';
+        }
+
+        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+        $text = $body['choices'][0]['message']['content'] ?? '';
+
+        return sanitize_text_field( trim( (string) $text ) );
     }
 
     // ─── Admin: conversations ─────────────────────────────────────────────────

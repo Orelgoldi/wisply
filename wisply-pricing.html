@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wisply — תוכנית תמחור ותגמולים</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:#f4f7f7; color:#1f2937; line-height:1.7; }
+  .wrap { max-width:920px; margin:0 auto; padding:24px 16px 60px; }
+  .hero { background:linear-gradient(135deg,#00A3A3,#00787a); color:#fff; border-radius:18px; padding:38px 32px; }
+  .hero h1 { font-size:30px; margin-bottom:6px; }
+  .hero .sub { opacity:.92; font-size:16px; }
+  .hero .tag { display:inline-block; background:rgba(255,255,255,.2); font-size:12px; letter-spacing:1px; padding:4px 12px; border-radius:999px; margin-bottom:12px; }
+  h2 { color:#00787a; font-size:22px; margin:34px 0 8px; display:flex; align-items:center; gap:8px; }
+  h2 .n { background:#00A3A3; color:#fff; width:30px; height:30px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:15px; }
+  p.lead { color:#4b5563; margin-bottom:12px; }
+  .card { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:20px 22px; margin-top:14px; }
+  table { width:100%; border-collapse:collapse; margin-top:12px; font-size:14.5px; background:#fff; border-radius:12px; overflow:hidden; }
+  th,td { padding:11px 12px; text-align:right; border-bottom:1px solid #eef2f2; }
+  thead th { background:#e9f7f7; color:#00787a; font-weight:700; }
+  tbody tr:last-child td { border-bottom:0; }
+  .plans { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:14px; }
+  .plan { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:18px 16px; text-align:center; position:relative; }
+  .plan.pop { border:2px solid #00A3A3; box-shadow:0 8px 24px rgba(0,163,163,.15); }
+  .plan .badge { position:absolute; top:-11px; right:50%; transform:translateX(50%); background:#00A3A3; color:#fff; font-size:11px; padding:3px 10px; border-radius:999px; white-space:nowrap; }
+  .plan h3 { color:#00787a; font-size:17px; margin-bottom:2px; }
+  .plan .price { font-size:26px; font-weight:800; color:#111; margin:8px 0 2px; }
+  .plan .price small { font-size:13px; font-weight:500; color:#6b7280; }
+  .plan ul { list-style:none; text-align:right; margin-top:12px; font-size:13.5px; }
+  .plan ul li { padding:5px 0; border-bottom:1px dashed #eef2f2; }
+  .plan ul li::before { content:"✓"; color:#00A3A3; font-weight:800; margin-left:6px; }
+  .setup { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:14px; }
+  .muted { color:#6b7280; font-size:13.5px; }
+  .pill { display:inline-block; background:#e9f7f7; color:#00787a; border-radius:8px; padding:2px 8px; font-size:12.5px; font-weight:600; }
+  .note { background:#fffbea; border:1px solid #fde68a; border-radius:12px; padding:14px 18px; margin-top:14px; font-size:13.5px; color:#7c5e10; }
+  .win { background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; }
+  strong.h { color:#00787a; }
+  @media(max-width:760px){ .plans,.setup{grid-template-columns:1fr 1fr;} }
+  @media(max-width:520px){ .plans,.setup{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="tag">WISPLY · AI CHAT ASSISTANT</div>
+    <h1>תוכנית תמחור ותגמולים</h1>
+    <div class="sub">עוזר AI חכם לאתר — טקסט, קול, לכידת לידים, CRM ודיוור. מודל של <b>הקמה חד-פעמית + מנוי חודשי</b>.</div>
+  </div>
+
+  <p class="lead" style="margin-top:18px">
+    כל המחירים <b>כוללים מע״מ (18%)</b>. המנוי כולל את עלויות ה-API, תחזוקה, עדכונים ותמיכה —
+    ובזכות עלות תפעולית נמוכה מאוד, המחירים <b>תחרותיים</b> ועדיין רווחיים מאוד.
+  </p>
+
+  <!-- 1. STRUCTURE -->
+  <h2><span class="n">1</span> מבנה התמחור</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>רכיב</th><th>מה זה כולל</th><th>מתי משלמים</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill">הקמה</span> חד-פעמי</td><td>התקנה, מיתוג ופרסונה, אינדוקס תוכן האתר, <b>חיבור למערכת CRM / דיוור</b>, עיצוב, בדיקות והדרכה</td><td>עם החתימה</td></tr>
+        <tr><td><span class="pill">מנוי</span> חודשי</td><td>שימוש שוטף (AI טקסט + קול), תחזוקה, עדכונים, דוחות ותמיכה</td><td>מדי חודש / שנה</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 2. SETUP -->
+  <h2><span class="n">2</span> עלות הקמה (חד-פעמי)</h2>
+
+  <div class="card" style="background:linear-gradient(135deg,#00A3A3,#00787a); color:#fff; border:0">
+    <div style="font-size:19px; font-weight:800">🚀 מחירי השקה — ל-10 הלקוחות הראשונים</div>
+    <div style="opacity:.95; margin-top:4px">כ-50% הנחה על ההקמה כדי לנחות לקוחות ראשונים ועדויות. <b>או: הקמה בחינם בהתחייבות שנתית למנוי.</b></div>
+  </div>
+
+  <div class="setup">
+    <div class="plan">
+      <div class="badge" style="background:#f59e0b">השקה</div>
+      <h3>Basic</h3>
+      <div class="price"><span style="text-decoration:line-through; color:#c0c7cf; font-size:17px">₪1,290</span> ₪690</div>
+      <div class="muted">מחיר השקה · כולל מע״מ</div>
+      <p class="muted" style="min-height:34px; margin-top:6px">הבוט עולה לאוויר באתר, מותאם למותג, ומחובר למערכת אחת.</p>
+      <ul>
+        <li>התקנה מלאה של הבוט באתר שלך</li>
+        <li>הגדרת שם, אופי וטון הבוט (פרסונה)</li>
+        <li>הבוט "לומד" את תוכן האתר ועונה לפיו</li>
+        <li>חיבור <b>אחד</b>: לידים ל-CRM <u>או</u> לרשימת דיוור</li>
+        <li>התאמת עיצוב הווידג׳ט לצבעי המותג</li>
+        <li>הדרכה: איך לנהל ולראות לידים</li>
+      </ul>
+    </div>
+    <div class="plan pop">
+      <div class="badge">הכי נפוץ · השקה</div>
+      <h3>Plus</h3>
+      <div class="price"><span style="text-decoration:line-through; color:#c0c7cf; font-size:17px">₪2,490</span> ₪1,290</div>
+      <div class="muted">מחיר השקה · כולל מע״מ</div>
+      <p class="muted" style="min-height:34px; margin-top:6px">בוט מלא: שיחות קול, 3 שפות, וחיבור גם ל-CRM וגם לדיוור.</p>
+      <ul>
+        <li>כל מה שב-Basic, ובנוסף:</li>
+        <li><b>2 חיבורים</b>: לידים ל-CRM + הרשמה לניוזלטר</li>
+        <li>הפעלת <b>שיחות קול</b> (הבוט מדבר ומקשיב)</li>
+        <li>כוונון מלא ל-3 שפות (עב׳ / אנג׳ / רוס׳)</li>
+        <li>כתיבת שאלות מובילות + הודעות פתיחה</li>
+        <li>עיצוב מותאם מלא + 2 הדרכות</li>
+      </ul>
+    </div>
+    <div class="plan">
+      <div class="badge" style="background:#f59e0b">השקה</div>
+      <h3>Tailor-Made</h3>
+      <div class="price"><span style="text-decoration:line-through; color:#c0c7cf; font-size:17px">₪3,900</span> מ-₪2,490</div>
+      <div class="muted">מחיר השקה · לפי אפיון · כולל מע״מ</div>
+      <p class="muted" style="min-height:34px; margin-top:6px">בנוי בדיוק לצרכים שלך — אינטגרציות ותהליכים מורכבים.</p>
+      <ul>
+        <li>הכל לפי אפיון הצרכים שלך</li>
+        <li>אינטגרציות מתקדמות (יומן, Zapier/Webhook, מערכות ייעודיות)</li>
+        <li>תהליכי שיחה ולידים בהתאמה אישית</li>
+        <li>שיחות קול <b>Real-Time</b> + לוגיקה מותאמת</li>
+        <li>ליווי צמוד לאורך כל ההטמעה</li>
+      </ul>
+    </div>
+  </div>
+  <p class="muted" style="margin-top:10px">
+    המחיר המלא (ללא השקה): Basic ₪1,290 · Plus ₪2,490 · Tailor-Made מ-₪3,900.
+    ההנחה מוגבלת ל-10 הלקוחות הראשונים — ומטרתה לצבור עדויות, המלצות ותנופה. הרווח נבנה מהמנוי החוזר.
+  </p>
+
+  <!-- 3. MONTHLY -->
+  <h2><span class="n">3</span> מנוי חודשי</h2>
+  <p class="lead">כל מדרגה כוללת מכסת שימוש חודשית נדיבה. חריגה מחויבת לפי היחידה (ראו טבלה) או שדרוג מדרגה.</p>
+
+  <div class="card" style="border:2px dashed #00A3A3; background:#f0fafa">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px">
+      <div>
+        <span class="pill" style="background:#00A3A3; color:#fff">חדש · ללא סיכון</span>
+        <span style="font-size:21px; font-weight:800; color:#00787a; margin-right:6px">Wisply Spark ✨</span>
+        <div class="muted" style="margin-top:4px">משלמים רק כשמדברים — <b>אין שיחות החודש? אין תשלום.</b></div>
+      </div>
+      <div style="text-align:center; min-width:150px">
+        <div style="font-size:30px; font-weight:800; color:#111">₪1 <small style="font-size:14px; color:#6b7280; font-weight:500">/ שיחה</small></div>
+        <div class="muted">₪0 דמי מנוי קבועים</div>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:12px; border-top:1px solid #d9eeee; padding-top:10px">
+      כולל: מנוע AI רגיל · עברית · לכידת לידים + הסכמה · דוח בסיסי. אידיאלי לעסק קטן, אתר בתחילת דרכו,
+      או פשוט לבדוק את הבוט בלי התחייבות. מעל ~100 שיחות בחודש — משתלם לעבור ל-<b>Lite (₪99)</b>.
+      <span class="muted">(כל המחירים כוללים מע״מ)</span>
+    </p>
+  </div>
+
+  <div class="plans">
+    <div class="plan">
+      <h3>Lite</h3>
+      <div class="price">₪99<small> /חודש</small></div>
+      <p class="muted" style="margin-top:8px; min-height:38px">לעסק קטן שרוצה בוט חכם בעברית שעונה ולוכד לידים</p>
+    </div>
+    <div class="plan pop">
+      <div class="badge">מומלץ</div>
+      <h3>Business</h3>
+      <div class="price">₪249<small> /חודש</small></div>
+      <p class="muted" style="margin-top:8px; min-height:38px">הבחירה הנפוצה — טקסט + קול + חיבור למערכות</p>
+    </div>
+    <div class="plan">
+      <h3>Pro</h3>
+      <div class="price">₪549<small> /חודש</small></div>
+      <p class="muted" style="margin-top:8px; min-height:38px">לעסקים עם נפח גבוה ומספר מערכות מחוברות</p>
+    </div>
+    <div class="plan">
+      <h3>Enterprise</h3>
+      <div class="price">מ-₪990<small> /חודש</small></div>
+      <p class="muted" style="margin-top:8px; min-height:38px">ארגונים — קול Real-Time, AI פרימיום ו-SLA</p>
+    </div>
+  </div>
+
+  <style>
+    .matrix td, .matrix th { text-align:center; }
+    .matrix td:first-child, .matrix th:first-child { text-align:right; font-weight:600; background:#fafcfc; }
+    .matrix .ok { color:#0a8f3c; font-weight:800; }
+    .matrix .no { color:#cbd5e1; }
+    .matrix thead th:nth-child(3) { background:#e0f5f5; }
+  </style>
+  <div class="card">
+    <strong class="h">מה כולל כל מסלול</strong>
+    <table class="matrix">
+      <thead><tr><th>מאפיין</th><th>Lite</th><th>Business</th><th>Pro</th><th>Enterprise</th></tr></thead>
+      <tbody>
+        <tr><td>שיחות טקסט / חודש</td><td>500</td><td>2,000</td><td>5,000</td><td>ללא הגבלה</td></tr>
+        <tr><td>שפות</td><td>עברית</td><td>2 שפות</td><td>3 שפות</td><td>3 + נוספות</td></tr>
+        <tr><td>הקראה קולית של התשובות (TTS)</td><td class="no">✗</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+        <tr><td>שיחת קול — דיבור לבוט</td><td class="no">✗</td><td>100 דק׳</td><td>300 דק׳</td><td>Real-Time</td></tr>
+        <tr><td>שמירת היסטוריית שיחות</td><td>7 ימים</td><td>30 יום</td><td>90 יום</td><td>ללא הגבלה</td></tr>
+        <tr><td>חיבור למערכת חיצונית (CRM/דיוור/Webhook)</td><td class="no">—</td><td>1</td><td>3</td><td>ללא הגבלה</td></tr>
+        <tr><td>לכידת לידים + הסכמה שיווקית</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+        <tr><td>בועית פנייה יזומה + פתיחה אוטומטית</td><td class="no">✗</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+        <tr><td>דוחות לידים למייל</td><td>בסיסי</td><td>יומי + שבועי</td><td>מלא + סיווג</td><td>מלא + מותאם</td></tr>
+        <tr><td>איכות מנוע ה-AI</td><td>רגיל</td><td>מתקדם</td><td>מתקדם</td><td>פרימיום</td></tr>
+        <tr><td>תמיכה</td><td>מייל</td><td>מייל + וואטסאפ</td><td>עדיפות</td><td>SLA</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <strong>מקרא — מה כל מאפיין אומר:</strong>
+    <ul style="margin-right:16px; margin-top:6px">
+      <li><b>הקראה קולית (TTS):</b> הבוט מקריא את התשובות בקול — הגולש יכול להאזין במקום לקרוא.</li>
+      <li><b>שיחת קול / Real-Time:</b> הגולש מדבר עם הבוט (מיקרופון). "Real-Time" = שיחה רציפה וטבעית ללא השהיה.</li>
+      <li><b>שמירת היסטוריית שיחות:</b> כמה זמן נשמר תוכן השיחות לצפייה וניתוח בלוח הבקרה.</li>
+      <li><b>חיבור למערכת חיצונית:</b> העברת לידים אוטומטית ל-CRM, הוספה לרשימת דיוור (Brevo/Mailchimp), יומן, או Webhook (Zapier/Make). כל חיבור = מערכת אחת.</li>
+      <li><b>איכות מנוע ה-AI:</b> "רגיל" — מהיר ומצוין למענה מבוסס-תוכן. "מתקדם/פרימיום" — מודל חזק יותר (Claude Sonnet / GPT-4o) לתשובות מדויקות, מנוסחות ומורכבות יותר.</li>
+      <li><b>SLA:</b> הסכם רמת שירות — התחייבות לזמן תגובה וזמינות (למשל מענה תוך 4 שעות עבודה, זמינות 99%).</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <strong class="h">מחיר חריגה מעבר למכסה</strong>
+    <table>
+      <thead><tr><th>מדרגה</th><th>שיחת טקסט נוספת</th><th>דקת קול (רגיל)</th><th>דקת Real-Time</th></tr></thead>
+      <tbody>
+        <tr><td>Lite</td><td>₪0.15</td><td>—</td><td>—</td></tr>
+        <tr><td>Business</td><td>₪0.12</td><td>₪0.40</td><td>—</td></tr>
+        <tr><td>Pro</td><td>₪0.09</td><td>₪0.35</td><td>₪1.80</td></tr>
+      </tbody>
+    </table>
+    <p class="muted" style="margin-top:8px">שיחה = סשן צ׳אט שלם (ממוצע ~6 הודעות). אפשר גם להגדיר "עצירה רכה" בהגעה למכסה במקום חיוב חריגה.</p>
+  </div>
+
+  <!-- 4. ADD-ONS -->
+  <h2><span class="n">4</span> תוספות (Add-ons)</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>תוסף</th><th>תיאור</th><th>מחיר (כולל מע״מ)</th></tr></thead>
+      <tbody>
+        <tr><td><b>AI פרימיום</b></td><td>שדרוג למודל החזק ביותר (Claude Sonnet 4.6 / GPT-4o) לאיכות מקסימלית — עד 1,000 שיחות; מעבר לכך ₪0.40/שיחה</td><td>+₪149 /חודש</td></tr>
+        <tr><td><b>Real-Time Voice</b></td><td>שיחת דיבור מיידית (ללא השהיה) — חבילת 300 דקות</td><td>+₪249 /חודש</td></tr>
+        <tr><td><b>אינטגרציה נוספת</b></td><td>חיבור CRM / דיוור / יומן / Webhook נוסף</td><td>+₪99 /חודש</td></tr>
+        <tr><td><b>שפה נוספת</b></td><td>מעבר ל-3 שפות המובנות</td><td>+₪79 /חודש</td></tr>
+        <tr><td><b>הקמת דף/קמפיין</b></td><td>אינדוקס והגדרת בוט לדף נחיתה נפרד</td><td>חד-פעמי ₪390</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 5. COGS transparency -->
+  <h2><span class="n">5</span> שקיפות עלויות ה-API (עלות למשווק)</h2>
+  <p class="lead">אלה העלויות התפעוליות האמיתיות מאחורי כל שימוש — הבסיס לרווחיות. מחושב לפי <b>₪3 לדולר</b>.</p>
+  <div class="card">
+    <table>
+      <thead><tr><th>שימוש</th><th>מה זה צורך</th><th>מודל יעיל<br><span class="muted">GPT-4o-mini / Haiku</span></th><th>מודל פרימיום<br><span class="muted">Sonnet 4.6 / GPT-4o</span></th></tr></thead>
+      <tbody>
+        <tr><td>שיחת טקסט (~6 הודעות)</td><td>אחזור תוכן + השלמה</td><td>~₪0.03</td><td>~₪0.40</td></tr>
+        <tr><td>דקת שיחת קול (רגיל)</td><td>Whisper + AI + TTS</td><td>~₪0.10</td><td>~₪0.50</td></tr>
+        <tr><td>דקת שיחת קול Real-Time</td><td>GPT-Realtime (דיבור-לדיבור)</td><td colspan="2" style="text-align:center">~₪0.90</td></tr>
+        <tr><td>אינדוקס תוכן</td><td>מבוסס מילות מפתח (מקומי)</td><td colspan="2" style="text-align:center">₪0 — ללא עלות API</td></tr>
+      </tbody>
+    </table>
+    <p class="muted" style="margin-top:10px">
+      דוגמת רווחיות — מדרגת <b>Business (₪249)</b>: 2,000 שיחות + 100 דק׳ קול ≈ עלות API של כ-<b>₪70 בלבד</b> →
+      <b>רווח גולמי ~70%</b>. במדרגת Lite עלות ה-API היא שקלים בודדים בלבד — כמעט הכל רווח ושירות.
+    </p>
+  </div>
+
+  <!-- 6. PARTNER COMMISSIONS -->
+  <h2><span class="n">6</span> תוכנית שותפים לבוני אתרים — עמלות</h2>
+  <p class="lead">בונה אתרים שמביא לקוח מקבל <b>אחוז מדמי ההקמה</b> (חד-פעמי) + <b>עמלה חודשית מתגלגלת</b> — כל עוד הלקוח פעיל. שלושה מסלולים, לפי כמה שהשותף מעורב:</p>
+
+  <div class="setup" style="grid-template-columns:repeat(2,1fr); max-width:620px">
+    <div class="plan">
+      <h3>מפנה</h3>
+      <div class="muted">Referral · הוא מפנה, אנחנו מקימים ומתמכים</div>
+      <div class="price" style="font-size:20px; margin-top:10px">25% <small>הקמה</small></div>
+      <div class="price" style="font-size:20px; margin-top:0">15% <small>מנוי/חודש</small></div>
+      <ul><li>אפס עבודה מצדו</li><li>עמלה חוזרת לכל החיים של הלקוח</li></ul>
+    </div>
+    <div class="plan pop">
+      <div class="badge">הכי משתלם לבונה</div>
+      <h3>שותף מוסמך</h3>
+      <div class="muted">Certified · הוא מקים ומחבר, אנחנו מוצר+גב+עדכונים</div>
+      <div class="price" style="font-size:20px; margin-top:10px">50% <small>הקמה</small></div>
+      <div class="price" style="font-size:20px; margin-top:0">25% <small>מנוי/חודש</small></div>
+      <ul><li>הכי רווחי אם הוא טכני</li><li>אנחנו מספקים הדרכה + תמיכת גב</li></ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <strong class="h">עמלת הקמה (חד-פעמי)</strong>
+    <table>
+      <thead><tr><th>חבילת הקמה</th><th>מחיר</th><th>מפנה (25%)</th><th>שותף מוסמך (50%)</th></tr></thead>
+      <tbody>
+        <tr><td>Basic</td><td>₪1,290</td><td>₪322</td><td>₪645</td></tr>
+        <tr><td>Plus</td><td>₪2,490</td><td>₪622</td><td>₪1,245</td></tr>
+        <tr><td>Tailor-Made</td><td>₪3,900</td><td>₪975</td><td>₪1,950</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <strong class="h">עמלה חודשית מתגלגלת (כל חודש שהלקוח פעיל)</strong>
+    <table>
+      <thead><tr><th>מנוי</th><th>מחיר/חודש</th><th>מפנה (15%)</th><th>שותף מוסמך (25%)</th></tr></thead>
+      <tbody>
+        <tr><td>Lite</td><td>₪99</td><td>₪15</td><td>₪25</td></tr>
+        <tr><td>Business</td><td>₪249</td><td>₪37</td><td>₪62</td></tr>
+        <tr><td>Pro</td><td>₪549</td><td>₪82</td><td>₪137</td></tr>
+        <tr><td>Enterprise</td><td>₪990</td><td>₪149</td><td>₪248</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card win note" style="color:#065f46">
+    <strong style="color:#065f46">💰 כוח ההכנסה המתגלגלת — דוגמה</strong>
+    <p style="margin-top:6px">בונה אתרים שהביא <b>10 לקוחות במסלול Business</b>:</p>
+    <table>
+      <thead><tr><th></th><th>מפנה</th><th>שותף מוסמך</th></tr></thead>
+      <tbody>
+        <tr><td>עמלות הקמה (חד-פעמי)</td><td>₪6,220</td><td>₪12,450</td></tr>
+        <tr><td>הכנסה חודשית חוזרת</td><td>₪370</td><td>₪620</td></tr>
+        <tr><td>הכנסה פסיבית שנתית</td><td><b>₪4,440</b></td><td><b>₪7,440</b></td></tr>
+      </tbody>
+    </table>
+    <p class="muted" style="margin-top:6px; color:#047857">וזה מצטבר — כל לקוח נוסף מגדיל את ההכנסה החוזרת, בלי תקרה.</p>
+  </div>
+
+  <div class="note">
+    <strong>איך זה עובד בפועל:</strong> העמלה החודשית משולמת כל עוד הלקוח משלם (trailing),
+    תשלום עמלות אחת לחודש. ניתן להתחיל כמפנה ולעבור לשותף מוסמך אחרי הסמכה קצרה.
+  </div>
+
+  <!-- Notes -->
+  <h2><span class="n">7</span> הערות</h2>
+  <div class="note">
+    <ul style="margin-right:16px">
+      <li>כל המחירים <b>כוללים מע״מ 18%</b>.</li>
+      <li>עלויות ה-API מחושבות לפי שער <b>₪3 לדולר</b> ומחירוני Anthropic/OpenAI. בפועל זול עוד יותר עם Prompt Caching.</li>
+      <li>המדרגות עובדות על <b>מודל AI יעיל</b> (מצוין למענה מבוסס-תוכן); <b>AI פרימיום</b> זמין כתוסף.</li>
+      <li><b>מסלול "מפתח משלך" (BYOK):</b> אם הלקוח מספק מפתח API משלו — הנחה ~₪49/חודש והמנוי הופך לדמי שירות בלבד.</li>
+      <li><b>הנחה שנתית:</b> תשלום מראש לשנה = חודשיים חינם (~17% הנחה).</li>
+      <li>המכסות (שיחות/דקות) ניתנות להתאמה אישית לפי צורכי הלקוח.</li>
+    </ul>
+  </div>
+
+  <p class="muted" style="text-align:center; margin-top:26px">Wisply · תוכנית תמחור ותגמולים · המחירים הצעה לעריכה לפי המדיניות שלך</p>
+
+</div>
+</body>
+</html>

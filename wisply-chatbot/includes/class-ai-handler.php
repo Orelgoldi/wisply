@@ -50,11 +50,31 @@ class Wisply_AI_Handler {
         $docs = $this->dedupe_docs( $docs );
         $docs = array_slice( $docs, 0, $limit );
 
+        // Live WooCommerce products (real-time price/stock/variations) when the module is on
+        $products = [];
+        if ( class_exists( 'Wisply_Woo' ) && Wisply_Woo::get_instance()->is_active() ) {
+            $woo          = Wisply_Woo::get_instance();
+            $max_products = (int) $this->db->get_setting( 'woo_max_products', 4 );
+            $products     = $woo->search_products( $user_message, $max_products );
+
+            // Similar products for the top hit — powers "מוצרים דומים" suggestions and
+            // gives the model alternatives to offer when the match is out of stock.
+            if ( ! empty( $products[0]['id'] ) ) {
+                $seen = array_map( 'intval', array_column( $products, 'id' ) );
+                foreach ( $woo->related_products( (int) $products[0]['id'], 2 ) as $rel ) {
+                    if ( empty( $rel['id'] ) || in_array( (int) $rel['id'], $seen, true ) ) continue;
+                    $rel['is_related'] = true;
+                    $products[] = $rel;
+                    $seen[]     = (int) $rel['id'];
+                }
+            }
+        }
+
         $provider = $this->db->get_setting( 'ai_provider', 'claude' );
 
         $result = match ( $provider ) {
-            'openai' => $this->call_openai( $user_message, $lang, $history, $docs ),
-            default  => $this->call_claude( $user_message, $lang, $history, $docs ),
+            'openai' => $this->call_openai( $user_message, $lang, $history, $docs, $products ),
+            default  => $this->call_claude( $user_message, $lang, $history, $docs, $products ),
         };
 
         $result['sources'] = array_map( fn( $d ) => [ 'title' => $d['title'], 'url' => $d['url'] ], $docs );
@@ -105,7 +125,7 @@ class Wisply_AI_Handler {
 
     // ─── Claude (Anthropic) ───────────────────────────────────────────────────
 
-    private function call_claude( string $user_message, string $lang, array $history, array $docs ): array {
+    private function call_claude( string $user_message, string $lang, array $history, array $docs, array $products = [] ): array {
         $api_key = $this->db->get_setting( 'ai_api_key', '' );
         $model   = $this->db->get_setting( 'ai_model', 'claude-sonnet-4-6' );
 
@@ -113,7 +133,7 @@ class Wisply_AI_Handler {
             return $this->fallback_no_config( $lang );
         }
 
-        $system  = $this->build_system_prompt( $lang, $docs, $user_message );
+        $system  = $this->build_system_prompt( $lang, $docs, $user_message, $products );
         $messages = $this->build_message_array( $history, $user_message );
 
         $payload = [
@@ -152,7 +172,7 @@ class Wisply_AI_Handler {
 
     // ─── OpenAI ───────────────────────────────────────────────────────────────
 
-    private function call_openai( string $user_message, string $lang, array $history, array $docs ): array {
+    private function call_openai( string $user_message, string $lang, array $history, array $docs, array $products = [] ): array {
         $api_key = $this->db->get_setting( 'openai_api_key', '' );
         $model   = $this->db->get_setting( 'openai_model', 'gpt-4o' );
 
@@ -160,7 +180,7 @@ class Wisply_AI_Handler {
             return $this->fallback_no_config( $lang );
         }
 
-        $system   = $this->build_system_prompt( $lang, $docs, $user_message );
+        $system   = $this->build_system_prompt( $lang, $docs, $user_message, $products );
         $messages = array_merge(
             [ [ 'role' => 'system', 'content' => $system ] ],
             $this->build_message_array( $history, $user_message )
@@ -216,7 +236,7 @@ class Wisply_AI_Handler {
 
     // ─── Prompt construction ──────────────────────────────────────────────────
 
-    private function build_system_prompt( string $lang, array $docs, string $query = '' ): string {
+    private function build_system_prompt( string $lang, array $docs, string $query = '', array $products = [] ): string {
         $context_block = '';
         if ( ! empty( $docs ) ) {
             $context_block = "\n\n=== תוכן רלוונטי מהאתר ===\n";
@@ -233,6 +253,23 @@ class Wisply_AI_Handler {
             }
         } else {
             $context_block = "\n\n=== תוכן רלוונטי מהאתר ===\n(לא נמצא תוכן רלוונטי לשאלה זו באתר)\n";
+        }
+
+        // Live product data block — authoritative over any indexed site content
+        $products_block = '';
+        if ( ! empty( $products ) && class_exists( 'Wisply_Woo' ) ) {
+            // Card cap must track the admin setting — otherwise an admin who allows 8
+            // products still only ever gets 4 cards rendered.
+            $card_cap = max( 1, min( 8, (int) $this->db->get_setting( 'woo_max_products', 4 ) ) );
+            $products_block = "\n\n=== מוצרים מהחנות (נתונים חיים ומעודכנים) ===\n"
+                . Wisply_Woo::get_instance()->format_products_for_prompt( $products, $query )
+                . "\n\nכללי מענה על מוצרים:\n"
+                . "• ענה על מחיר, מלאי ווריאציות אך ורק לפי הנתונים שבבלוק המוצרים למעלה. הנתונים האלה גוברים על כל מחיר או מידע שמופיע בתוכן האתר. לעולם אל תמציא מחיר או מצב מלאי, ואל תשלים מספרים מהזיכרון.\n"
+                . "• כשאתה מוסר מחיר — מסור את \"מחיר נוכחי\". אם צוין שהמוצר במבצע, ציין גם את המחיר הרגיל. לעולם אל תציג את המחיר הרגיל כאילו הוא המחיר לתשלום.\n"
+                . "• אם למוצר יש כמה וריאציות (מידה/צבע וכד') — שאל את הגולש איזו מתאימה לו, ורק אז מסור את המחיר והמלאי של הווריאציה הנכונה.\n"
+                . "• אם מוצר אזל מהמלאי — אמור זאת בכנות והצע חלופה מתוך רשימת המוצרים למעלה (מוצרים המסומנים \"מוצר דומה\" נועדו בדיוק לכך).\n"
+                . "• אם יש בלוק משלוחים — ענה על עלויות וזמני משלוח אך ורק לפיו.\n"
+                . sprintf( "• הוסף בסוף התשובה את הסמן [PRODUCTS: id,id] עם עד %d מזהי המוצרים הרלוונטיים שהזכרת, כדי שיוצגו לגולש ככרטיסים. אם לא הזכרת אף מוצר — אל תוסיף את הסמן.", $card_cap );
         }
 
         $lang_instruction = match ( $lang ) {
@@ -318,6 +355,7 @@ $emergency_block
 $action_block
 $jobs_block
 $context_block
+$products_block
 PROMPT;
     }
 

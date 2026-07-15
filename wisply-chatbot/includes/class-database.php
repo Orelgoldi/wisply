@@ -212,6 +212,11 @@ class Wisply_Database {
             'report_recipients'  => '',   // comma / newline separated emails
             'report_daily'       => '1',
             'report_weekly'      => '1',
+            // E-commerce module (WooCommerce) — live product data via WooCommerce's PHP API
+            'woo_enabled'        => '0',
+            'woo_max_products'   => '4',
+            'woo_show_stock'     => '1',
+            'woo_visual_search'  => '0',
         ];
         foreach ( $defaults as $key => $value ) {
             $this->set_setting( $key, $value, false );
@@ -455,6 +460,7 @@ class Wisply_Database {
             'consent_required', 'consent_version',
             'consent_text_he', 'consent_text_en', 'consent_text_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
+            'woo_enabled', 'woo_show_stock', 'woo_visual_search',
         ] ) );
     }
 

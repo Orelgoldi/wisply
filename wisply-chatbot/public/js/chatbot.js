@@ -161,6 +161,7 @@
   const ICO_SPEAKER_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>`;
   const ICO_MIC_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V5a3 3 0 00-5.94-.6"/><path d="M17 16.95A7 7 0 015 12M12 18v3"/><path d="M2 2l20 20"/></svg>`;
   const ICO_PHONE_DOWN = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5a16 16 0 0118 0v3a2 2 0 01-2 2l-2.5-.3a1.5 1.5 0 01-1.3-1.2l-.3-1.6a1.5 1.5 0 00-1.1-1.1 12 12 0 00-5.6 0 1.5 1.5 0 00-1.1 1.1l-.3 1.6a1.5 1.5 0 01-1.3 1.2L3 15.5a2 2 0 01-2-2v-3z"/></svg>`;
+  const ICO_CAMERA = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A2 2 0 015 6.5h2.2l1.3-2h7l1.3 2H19a2 2 0 012 2V18a2 2 0 01-2 2H5a2 2 0 01-2-2V8.5z"/><circle cx="12" cy="13" r="3.4"/></svg>`;
 
   /* ── Build (renders into the shadow root) ── */
   function build() {
@@ -203,6 +204,8 @@
           <button class="m-mic-btn" id="m-mic" aria-label="${t('voice_call')}" title="${t('voice_call')}">${ICO_MIC}</button>
           <textarea id="m-textarea" class="m-textarea" rows="1"
             placeholder="${t('placeholder')}" maxlength="500" aria-label="הקלד/י הודעה" autocomplete="off"></textarea>
+          ${VISUAL_SEARCH ? `<button class="m-mic-btn m-img-btn" id="m-img" aria-label="${WOO_T.img_search}" title="${WOO_T.img_search}">${ICO_CAMERA}</button>
+          <input type="file" id="m-img-file" accept="image/*" hidden>` : ''}
           <button class="m-send-btn" id="m-send" disabled aria-label="שליחה">${ICO_SEND}</button>
         </div>
 
@@ -264,6 +267,16 @@
     snd?.addEventListener('click', send);
     ta?.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
     ta?.addEventListener('input', () => { if (snd) snd.disabled = !ta.value.trim(); autoH(ta); });
+
+    // Visual product search — the button only proxies to the hidden file input
+    const imgBtn = $id('m-img');
+    const imgIn  = $id('m-img-file');
+    imgBtn?.addEventListener('click', () => imgIn?.click());
+    imgIn?.addEventListener('change', () => {
+      const f = imgIn.files && imgIn.files[0];
+      imgIn.value = '';           // allow re-picking the same file
+      if (f) imageSearch(f);
+    });
 
     $id('m-call')?.addEventListener('click', () => location.href = 'tel:' + (S.phone||'').replace(/[^\d+]/g,''));
     $id('m-map')?.addEventListener('click',  () => window.open(S.map_url,'_blank','noopener'));
@@ -530,6 +543,7 @@
       let reply = d.reply;
       const actionMatch = reply.match(/\[ACTION:([a-z_]+)\]/i);
       const optsMatch   = reply.match(/\[OPTIONS:([^\]]+)\]/i);
+      const prodMatch   = reply.match(/\[PRODUCTS:([^\]]+)\]/i);
       const askLead     = /\[ASK_LEAD\]/i.test(reply);
       const showForm    = /\[SHOW_LEAD_FORM\]/i.test(reply);
       const emergency   = /\[EMERGENCY\]/i.test(reply);
@@ -537,12 +551,14 @@
       const cleanReply = reply
         .replace(/\[ACTION:[a-z_]+\]/ig, '')
         .replace(/\[OPTIONS:[^\]]+\]/ig, '')
+        .replace(/\[PRODUCTS:[^\]]*\]/ig, '')
         .replace(/\[ASK_LEAD\]/ig, '')
         .replace(/\[SHOW_LEAD_FORM\]/ig, '')
         .replace(/\[EMERGENCY\]/ig, '')
         .trim();
 
       botMsg(cleanReply);
+      if (prodMatch)  productCards(parseIds(prodMatch[1]));
       if (emergency)  emergencyButtons();
       if (optsMatch)  optionButtons(optsMatch[1].split('|').map(s => s.trim()).filter(Boolean));
       if (askLead)    askLeadButtons();
@@ -719,6 +735,159 @@
     a.textContent = label;
     msgs.appendChild(a);
     scroll(msgs);
+  }
+
+  /* ── WooCommerce products ───────────────────────────────────────────────────
+     The AI ends a reply with [PRODUCTS: 12,34]; the marker is stripped from the
+     text (see sendText/vmAsk) and the ids are rendered here as rich cards. */
+
+  const VISUAL_SEARCH  = (S.woo_visual_search ?? '0') === '1';
+  const WOO_SHOW_STOCK = (S.woo_show_stock ?? '1') !== '0';
+  const MAX_IMG_BYTES  = 2 * 1024 * 1024;
+
+  const WOO_T = {
+    img_search:  'חיפוש מוצר לפי תמונה',
+    searching:   'מחפש מוצרים דומים…',
+    view:        'לצפייה במוצר',
+    variations:  'כמה אפשרויות זמינות',
+    instock:     'במלאי',
+    outofstock:  'אזל מהמלאי',
+    onbackorder: 'בהזמנה מראש',
+    too_big:     'התמונה גדולה מדי (עד 2MB). אפשר לנסות תמונה קטנה יותר.',
+  };
+
+  /* "12, 34" → [12,34] — tolerant of spaces and stray separators */
+  function parseIds(raw) {
+    return String(raw || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => n > 0);
+  }
+
+  async function productCards(ids) {
+    if (!ids || !ids.length || !$id('m-msgs')) return;
+    try {
+      const res = await fetch(CFG.apiUrl + '/products', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'X-WP-Nonce': CFG.nonce },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) return;
+      const d = await res.json();
+      renderProducts(Array.isArray(d.products) ? d.products : []);
+    } catch {}
+  }
+
+  function renderProducts(products) {
+    const msgs = $id('m-msgs');
+    if (!msgs || !products.length) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'm-products';
+    wrap.style.cssText = 'display:flex;gap:10px;overflow-x:auto;padding:2px 2px 8px;margin:2px 0 4px;scrollbar-width:thin;-webkit-overflow-scrolling:touch';
+    wrap.innerHTML = products.map(productCard).join('');
+    msgs.appendChild(wrap);
+    scroll(msgs);
+  }
+
+  function productCard(p) {
+    const badge = WOO_SHOW_STOCK ? stockBadge(p.stock_status) : '';
+    const img = p.image
+      ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" loading="lazy"
+             style="width:100%;height:118px;object-fit:cover;background:#f2f4f6">`
+      : `<div style="width:100%;height:118px;background:#f2f4f6"></div>`;
+    const variations = (p.variations && p.variations.length)
+      ? `<div style="font-size:11px;opacity:.65">${WOO_T.variations}</div>` : '';
+
+    // price_html is WooCommerce-formatted markup (currency + sale strikethrough) — render as-is
+    return `
+      <div class="m-product" style="flex:0 0 168px;display:flex;flex-direction:column;border:1px solid rgba(0,0,0,.09);border-radius:12px;overflow:hidden;background:#fff">
+        <div style="position:relative">
+          ${img}
+          ${p.on_sale ? `<span style="position:absolute;top:6px;inset-inline-start:6px;background:#e0245e;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px">SALE</span>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;padding:8px 9px 10px;flex:1">
+          <div style="font-size:12.5px;font-weight:600;line-height:1.35;max-height:2.7em;overflow:hidden">${esc(p.name)}</div>
+          <div style="font-size:12.5px;color:var(--c-teal-600);font-weight:700">${p.price_html || ''}</div>
+          ${badge}
+          ${variations}
+          <a href="${esc(p.permalink)}" target="_blank" rel="noopener"
+             style="margin-top:auto;display:block;text-align:center;background:var(--c-teal-600);color:#fff;font-size:12px;font-weight:600;text-decoration:none;padding:7px 8px;border-radius:8px">${WOO_T.view}</a>
+        </div>
+      </div>`;
+  }
+
+  function stockBadge(status) {
+    const on = status === 'instock';
+    const label = status === 'onbackorder' ? WOO_T.onbackorder : (on ? WOO_T.instock : WOO_T.outofstock);
+    const color = on ? '#0a7a34' : status === 'onbackorder' ? '#8a5a00' : '#b3261e';
+    const bg    = on ? 'rgba(10,122,52,.10)' : status === 'onbackorder' ? 'rgba(138,90,0,.10)' : 'rgba(179,38,30,.10)';
+    return `<span style="align-self:flex-start;font-size:10.5px;font-weight:700;color:${color};background:${bg};padding:2px 7px;border-radius:20px">${label}</span>`;
+  }
+
+  /* ─ Visual search: pick an image → find lookalike products ─ */
+  async function imageSearch(file) {
+    if (file.size > MAX_IMG_BYTES) { botMsg(WOO_T.too_big); return; }
+
+    clearSuggestions();
+    hadActivity = true;
+    resetIdle();
+
+    let dataUrl;
+    try { dataUrl = await fileToDataUrl(file); } catch { botMsg(t('error')); return; }
+
+    userImg(dataUrl);
+    const dots = typingNote(WOO_T.searching);
+
+    try {
+      const res = await fetch(CFG.apiUrl + '/product-image-search', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'X-WP-Nonce': CFG.nonce },
+        body: JSON.stringify({ image: dataUrl, lang }),
+      });
+      dots.remove();
+      if (!res.ok) throw new Error(res.status);
+      const d = await res.json();
+      if (d.reply) botMsg(d.reply);
+      renderProducts(Array.isArray(d.products) ? d.products : []);
+    } catch {
+      dots.remove();
+      botMsg(t('error'));
+    }
+  }
+
+  function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onloadend = () => resolve(String(r.result || ''));
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+
+  /* The visitor's uploaded image, shown as their "message" */
+  function userImg(src) {
+    const msgs = $id('m-msgs');
+    if (!msgs) return;
+    const el = document.createElement('div');
+    el.className = 'm-msg user';
+    el.innerHTML = `
+      <div class="m-bub" style="padding:5px">
+        <img src="${esc(src)}" alt="" style="display:block;max-width:150px;border-radius:8px">
+      </div>
+      <div class="m-ts">${clock()}</div>`;
+    msgs.appendChild(el);
+    scroll(msgs);
+  }
+
+  /* Typing dots with a label ("searching…") — same bubble as typing() */
+  function typingNote(label) {
+    const msgs = $id('m-msgs');
+    const el = document.createElement('div');
+    el.className = 'm-msg bot';
+    el.innerHTML = `<div class="m-bub" style="padding:6px 14px;display:flex;align-items:center;gap:8px">
+        <div class="m-typing"><span></span><span></span><span></span></div>
+        <span style="font-size:12px;opacity:.7">${esc(label)}</span>
+      </div>`;
+    msgs.appendChild(el);
+    scroll(msgs);
+    return el;
   }
 
   /* ── Voice ──────────────────────────────────────────────────────────────────
@@ -1209,6 +1378,7 @@
       let reply = (d.reply || '')
         .replace(/\[ACTION:[a-z_]+\]/ig, '')
         .replace(/\[OPTIONS:[^\]]+\]/ig, '')
+        .replace(/\[PRODUCTS:[^\]]*\]/ig, '')
         .replace(/\[ASK_LEAD\]/ig, '')
         .replace(/\[SHOW_LEAD_FORM\]/ig, '')
         .replace(/\[EMERGENCY\]/ig, '')
