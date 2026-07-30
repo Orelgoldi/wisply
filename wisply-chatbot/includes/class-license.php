@@ -31,6 +31,13 @@ class Wisply_License {
      */
     private const REJECTIONS = [ 'not_found', 'suspended', 'canceled', 'expired', 'quota', 'not_activated' ];
 
+    /**
+     * How many chat languages each plan may run at once. A local mirror of the
+     * server's plan_max_langs(), used only as a fallback when a response does not
+     * carry an explicit max_langs field (older server, partial payload).
+     */
+    private const PLAN_MAX_LANGS = [ 'spark' => 1, 'lite' => 1, 'business' => 4, 'pro' => 4, 'enterprise' => 4 ];
+
     /** How often admin_init is allowed to phone home. */
     private const CHECK_EVERY = 12 * HOUR_IN_SECONDS;
 
@@ -153,6 +160,13 @@ class Wisply_License {
             return [ 'ok' => false, 'status' => 'unknown', 'message' => $unreachable ];
         }
 
+        // Learn the plan's language allowance from any real answer that carries it
+        // (active OR a rejection like 'quota' still names the plan). STICKY: we only
+        // ever overwrite with a value we were told — an 'unknown' never resets it, so
+        // a confirmed Business customer keeps 4 languages straight through our outage.
+        $ml = $this->max_langs_from_response( $res );
+        if ( $ml > 0 ) $this->db->set_setting( 'license_max_langs', (string) $ml );
+
         $message = (string) ( $res['message'] ?? '' );
 
         if ( ! empty( $res['ok'] ) ) {
@@ -262,6 +276,28 @@ class Wisply_License {
         }
 
         return true; // unknown / never checked → fail-open
+    }
+
+    /** Read a plan's language allowance out of a server response (explicit field, or via plan). */
+    private function max_langs_from_response( array $res ): int {
+        if ( isset( $res['max_langs'] ) && is_numeric( $res['max_langs'] ) ) {
+            return max( 0, (int) $res['max_langs'] );
+        }
+        $plan = strtolower( trim( (string) ( $res['plan'] ?? '' ) ) );
+        return self::PLAN_MAX_LANGS[ $plan ] ?? 0;
+    }
+
+    /**
+     * How many chat languages this install may run at once.
+     *
+     * Defaults to 1 when we have never heard a real answer — languages beyond the
+     * first are the premium feature, and a fresh install's enabled set is a single
+     * language anyway, so a cap of 1 changes nothing until a qualifying plan is
+     * confirmed. Once confirmed the value is sticky (see apply()).
+     */
+    public function max_langs(): int {
+        $stored = (int) $this->db->get_setting( 'license_max_langs', 0 );
+        return $stored > 0 ? $stored : 1;
     }
 
     /** Where the licence field lives. */

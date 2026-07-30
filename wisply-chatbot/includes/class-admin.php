@@ -84,6 +84,9 @@ class Wisply_Admin {
     public function enqueue_assets( string $hook ): void {
         if ( strpos( $hook, 'wisply' ) === false ) return;
 
+        // The avatar picker's "upload image" button uses the WP media modal.
+        wp_enqueue_media();
+
         wp_enqueue_style(
             'wisply-admin',
             WISPLY_PLUGIN_URL . 'admin/css/admin.css',
@@ -216,9 +219,9 @@ class Wisply_Admin {
 
         $allowed     = [
             'license_key',
-            'ai_provider', 'ai_api_key', 'ai_model',
+            'ai_provider', 'ai_api_key', 'ai_model', 'ai_custom_rules',
             'openai_api_key', 'openai_model',
-            'primary_color', 'secondary_color', 'font_family', 'bubble_position',
+            'primary_color', 'secondary_color', 'font_family', 'bubble_position', 'bot_avatar', 'bot_avatar_url',
             'greeting_he', 'greeting_en', 'greeting_ru',
             'widget_title_he', 'widget_title_en', 'widget_title_ru',
             'phone', 'map_url', 'max_context_docs', 'conversation_ttl_days',
@@ -231,7 +234,7 @@ class Wisply_Admin {
             'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'report_recipients', 'report_daily', 'report_weekly',
-            'woo_enabled', 'woo_max_products', 'woo_show_stock', 'woo_visual_search',
+            'woo_enabled', 'woo_max_products', 'woo_show_stock', 'woo_visual_search', 'woo_bundle_enabled', 'woo_order_status_enabled',
             'lead_field_name', 'lead_field_phone', 'lead_field_email',
             'conversation_end_action', 'max_messages', 'wrapup_margin',
         ];
@@ -301,12 +304,13 @@ class Wisply_Admin {
                                              : "נכשל — נכתב \"$token\" אך נקרא \"$read\"",
         ];
 
-        // 2) Is the OpenAI key present?
-        $key = (string) $db->get_setting( 'openai_api_key', '' );
+        // 2) Is the Wisply licence key present? (It is the AI credential now —
+        //    the proxy serves AI with the customer's platform-managed key.)
+        $key = class_exists( 'Wisply_License' ) ? Wisply_License::get_instance()->get_key() : '';
         $out['openai_key'] = [
             'ok'     => ( $key !== '' ),
-            'detail' => ( $key !== '' ) ? ( 'מפתח מוגדר (' . strlen( $key ) . ' תווים)' )
-                                        : 'לא מוגדר מפתח OpenAI כלל',
+            'detail' => ( $key !== '' ) ? 'מפתח רישיון מוגדר — ה-AI מנוהל דרך Wisply'
+                                        : 'לא הוזן מפתח רישיון (לשונית "מתקדם")',
         ];
 
         // 3) Does a real OpenAI chat call succeed?

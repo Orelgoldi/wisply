@@ -13,17 +13,28 @@
   const $id = id => shadow ? shadow.getElementById(id) : null;
 
   /* ── Language ── */
+  const SUPPORTED = ['he','en','ru','ar'];
+  /* Languages the site owner turned on (comma list from settings). Empty → all. */
+  const ENABLED = (() => {
+    const raw = String(S.enabled_langs || '').toLowerCase();
+    const list = raw.split(',').map(s => s.trim()).filter(s => SUPPORTED.includes(s));
+    const uniq = list.filter((l, i) => list.indexOf(l) === i);
+    return uniq.length ? uniq : SUPPORTED.slice();
+  })();
+  const DEFAULT_LANG = ENABLED.includes(String(S.default_lang || '').toLowerCase())
+    ? String(S.default_lang).toLowerCase() : ENABLED[0];
+  const langLabel = l => l === 'he' ? 'עב' : l === 'ar' ? 'ع' : l.toUpperCase();
   let lang = (() => {
     const saved = sessionStorage.getItem('wisply_lang');
-    if (saved) return saved;
+    if (saved && ENABLED.includes(saved)) return saved;
     const l = (CFG.lang || 'he_IL').slice(0, 2).toLowerCase();
-    return ['he','en','ru'].includes(l) ? l : 'he';
+    return ENABLED.includes(l) ? l : DEFAULT_LANG;
   })();
   /* Switch language WITHOUT rebuilding the whole widget. Rebuilding (replacing the
      entire shadow DOM + re-wiring every listener) was fragile and could leave the
      widget unresponsive ("stuck") on mobile. Instead we just relabel in place. */
   function setLang(l) {
-    if (!['he','en','ru'].includes(l) || l === lang) return;
+    if (!ENABLED.includes(l) || l === lang) return;
     lang = l;
     sessionStorage.setItem('wisply_lang', l);
     try { stopListen(); stopAudio(); endVoice(); } catch (e) {}
@@ -75,7 +86,8 @@
     if (!hadActivity) return;       // nothing to end
     endChat({ he:'⏱️ השיחה הסתיימה עקב חוסר פעילות.',
               en:'⏱️ The conversation ended due to inactivity.',
-              ru:'⏱️ Разговор завершён из-за неактивности.' }[lang] || '');
+              ru:'⏱️ Разговор завершён из-за неактивности.',
+              ar:'⏱️ انتهت المحادثة بسبب عدم النشاط.' }[lang] || '');
   }
 
   /* Managed end (FR-007A): never end without an action — freeze the composer and
@@ -177,6 +189,21 @@
       vm_muted:'Микрофон выключен', vm_error:'Секунду, попробуем снова...',
       vm_mute:'Выключить микрофон', vm_end:'Завершить', vm_connecting:'Соединение...',
     },
+    ar: {
+      placeholder:'اكتب رسالة...', online:'يرد عادةً على الفور', call:'اتصلوا', dir:'الاتجاهات',
+      error:'عذرًا، حدث خطأ ما. حاولوا مرة أخرى أو اتصلوا بنا هاتفيًا.',
+      lead_title:'يسعدنا التواصل معكم — اتركوا التفاصيل', lead_name:'الاسم الكامل',
+      lead_phone:'الهاتف', lead_email:'البريد الإلكتروني (اختياري)', lead_btn:'إرسال', lead_ok:'شكرًا! سنتواصل معكم قريبًا.',
+      lead_required:'يرجى تعبئة جميع الحقول المطلوبة', lead_contact:'يرجى ترك رقم هاتف أو بريد إلكتروني حتى نتمكن من التواصل معكم', call_now:'📞 اتصلوا الآن',
+      chat_ended:'✅ انتهت المحادثة. شكرًا لتواصلكم معنا!',
+      suggest:'أسئلة شائعة', what_to_know:'ماذا تريد أن تعرف؟', new_chat:'بدء محادثة جديدة',
+      ask_yes:'نعم، بكل سرور', ask_no:'لا، شكرًا', ask_declined:'لا مشكلة! أنا هنا إذا احتجت المزيد من المعلومات 😊',
+      chips:['ماذا تقدّمون؟','كيف يمكنني التواصل معكم؟','أين تقعون؟','ما هي ساعات العمل؟'],
+      voice_call:'مكالمة صوتية', vm_hint:'تحدث بحرية — سأرد عليك صوتيًا',
+      vm_listen:'أستمع...', vm_think:'أفكر...', vm_speak:'أتحدث...',
+      vm_muted:'الميكروفون مكتوم', vm_error:'لحظة، سنحاول مرة أخرى...',
+      vm_mute:'كتم الميكروفون', vm_end:'إنهاء المكالمة', vm_connecting:'جارٍ الاتصال...',
+    },
   };
   const t = k => (T[lang] || T.he)[k];
 
@@ -191,6 +218,29 @@
   const ICO_MIC_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V5a3 3 0 00-5.94-.6"/><path d="M17 16.95A7 7 0 015 12M12 18v3"/><path d="M2 2l20 20"/></svg>`;
   const ICO_PHONE_DOWN = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5a16 16 0 0118 0v3a2 2 0 01-2 2l-2.5-.3a1.5 1.5 0 01-1.3-1.2l-.3-1.6a1.5 1.5 0 00-1.1-1.1 12 12 0 00-5.6 0 1.5 1.5 0 00-1.1 1.1l-.3 1.6a1.5 1.5 0 01-1.3 1.2L3 15.5a2 2 0 01-2-2v-3z"/></svg>`;
   const ICO_CAMERA = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A2 2 0 015 6.5h2.2l1.3-2h7l1.3 2H19a2 2 0 012 2V18a2 2 0 01-2 2H5a2 2 0 01-2-2V8.5z"/><circle cx="12" cy="13" r="3.4"/></svg>`;
+
+  /* ── Avatars: the bot's "face" in the header and teaser. Preset line icons (they
+     inherit the header's white via currentColor) plus a custom uploaded image. ── */
+  const AVATARS = {
+    robot:   `<svg viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><path d="M13 2.4a1.4 1.4 0 10-2 1.25V5.2H8.2A3.7 3.7 0 004.5 8.9v5.4a3.7 3.7 0 003.7 3.7h7.6a3.7 3.7 0 003.7-3.7V8.9a3.7 3.7 0 00-3.7-3.7H13V3.65A1.4 1.4 0 0013 2.4zM9.6 10.4a1.7 1.7 0 100 3.4 1.7 1.7 0 000-3.4zm4.8 0a1.7 1.7 0 100 3.4 1.7 1.7 0 000-3.4z"/><path d="M2.6 10.5a1 1 0 011 1v2a1 1 0 11-2 0v-2a1 1 0 011-1zm18.8 0a1 1 0 011 1v2a1 1 0 11-2 0v-2a1 1 0 011-1z"/></svg>`,
+    sparkle: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.5 2.3c.5 3.7 2.2 5.4 5.9 5.9-3.7.5-5.4 2.2-5.9 5.9-.5-3.7-2.2-5.4-5.9-5.9 3.7-.5 5.4-2.2 5.9-5.9z"/><path d="M18 13c.25 1.9 1.1 2.75 3 3-1.9.25-2.75 1.1-3 3-.25-1.9-1.1-2.75-3-3 1.9-.25 2.75-1.1 3-3z"/></svg>`,
+    chat:    `<svg viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><path d="M6.5 3.5A2.75 2.75 0 003.75 6.25v8A2.75 2.75 0 006.5 17H8v3.1a1 1 0 001.64.77L14 17h3.5a2.75 2.75 0 002.75-2.75v-8A2.75 2.75 0 0017.5 3.5h-11zM9 8.4a1.3 1.3 0 100 2.6 1.3 1.3 0 000-2.6zm6 0a1.3 1.3 0 100 2.6 1.3 1.3 0 000-2.6zm-6.2 4.3a1 1 0 00-1.6 1.15 5.5 5.5 0 009.6 0 1 1 0 10-1.7-1.05 3.5 3.5 0 01-6.3 0z"/></svg>`,
+    headset: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a8.5 8.5 0 00-8.5 8.5v.5a1 1 0 001 1H6v-1.5a6 6 0 0112 0V17a2.5 2.5 0 01-2.5 2.5h-2.1a1.4 1.4 0 100 1.5H15.5A4 4 0 0019.4 17.6 1.5 1.5 0 0020.5 12v-.5A8.5 8.5 0 0012 3z"/><rect x="3" y="11.6" width="4" height="6.4" rx="2"/><rect x="17" y="11.6" width="4" height="6.4" rx="2"/></svg>`,
+    person:  `<svg viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><path d="M12 2.4a9.6 9.6 0 100 19.2 9.6 9.6 0 000-19.2zM8.7 9a1.45 1.45 0 100 2.9 1.45 1.45 0 000-2.9zm6.6 0a1.45 1.45 0 100 2.9 1.45 1.45 0 000-2.9zM7.9 14.1a1 1 0 00-1.65 1.15 7 7 0 0011.5 0A1 1 0 1016.1 14.1a5 5 0 01-8.2 0z"/></svg>`,
+    heart:   `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.2S3.3 15.6 3.3 9.6C3.3 6.4 5.8 4.2 8.6 4.2c1.8 0 3.1.9 3.4 2.1.3-1.2 1.6-2.1 3.4-2.1 2.8 0 5.3 2.2 5.3 5.4 0 6-8.7 11.6-8.7 11.6z"/></svg>`,
+    store:   `<svg viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><path d="M8 6a4 4 0 118 0h2.2a1.5 1.5 0 011.49 1.33l1.2 11A1.5 1.5 0 0119.4 20H4.6a1.5 1.5 0 01-1.49-1.67l1.2-11A1.5 1.5 0 015.8 6H8zm2 0h4a2 2 0 10-4 0zm-.5 4.5a1 1 0 10-2 0 4.5 4.5 0 009 0 1 1 0 10-2 0 2.5 2.5 0 01-5 0z"/></svg>`,
+    spark:   `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.7 2.2a.6.6 0 00-1.08-.14L5.3 12.4a.7.7 0 00.57 1.1H10l-1.6 8a.6.6 0 001.08.46l7.3-10.3a.7.7 0 00-.57-1.1H12l1.7-8.36z"/></svg>`,
+  };
+  function avatarImg(src) {
+    return `<img src="${esc(src)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">`;
+  }
+  function avatarHtml() {
+    const key = S.bot_avatar || 'av-1';
+    if (key === 'custom' && S.bot_avatar_url) return avatarImg(S.bot_avatar_url);
+    // Bundled illustrated character avatars (av-1 … av-8), served from the plugin.
+    if (/^av-\d+$/.test(key) && CFG.avatarBase) return avatarImg(CFG.avatarBase + key + '.png?v=' + (CFG.avatarVer || ''));
+    return AVATARS[key] || AVATARS.robot;   // legacy monochrome icon presets
+  }
 
   /* ── Build (renders into the shadow root) ── */
   function build() {
@@ -213,7 +263,7 @@
       <div class="m-win" id="m-win" role="dialog" aria-modal="true" aria-label="${esc(botName())}" hidden>
 
         <header class="m-head">
-          <div class="m-head-av">${ICO_BOT}</div>
+          <div class="m-head-av">${avatarHtml()}</div>
           <div class="m-head-info">
             <div class="m-head-name" id="m-name">${botName()}</div>
             <div class="m-head-status"><span class="m-status-dot"></span><span id="m-online">${t('online')}</span></div>
@@ -241,11 +291,11 @@
         <footer class="m-foot">
           <button class="m-speaker" id="m-speaker" aria-label="הקראה קולית" title="הקראת תשובות בקול">${ICO_SPEAKER_OFF}</button>
           ${poweredBy()}
-          <div class="m-langs" role="group" aria-label="בחירת שפה">
-            ${['he','en','ru'].map(l =>
-              `<button class="m-lang${lang===l?' on':''}" data-l="${l}" aria-pressed="${lang===l}">${l==='he'?'עב':l.toUpperCase()}</button>`
+          ${ENABLED.length > 1 ? `<div class="m-langs" role="group" aria-label="בחירת שפה">
+            ${ENABLED.map(l =>
+              `<button class="m-lang${lang===l?' on':''}" data-l="${l}" aria-pressed="${lang===l}">${langLabel(l)}</button>`
             ).join('')}
-          </div>
+          </div>` : ''}
         </footer>
       </div>`;
 
@@ -256,7 +306,7 @@
   function botName()  {
     return (S.bot_name && S.bot_name.trim())
         || S['widget_title_'+lang] || S.widget_title_he
-        || ({ he:'עוזר חכם', en:'Smart Assistant', ru:'Умный помощник' }[lang] || 'Assistant');
+        || ({ he:'עוזר חכם', en:'Smart Assistant', ru:'Умный помощник', ar:'مساعد ذكي' }[lang] || 'Assistant');
   }
   function shortName(){ return (S.bot_name && S.bot_name.trim()) || botName().split(/[—–-]/)[0].trim() || botName(); }
 
@@ -264,7 +314,7 @@
   function poweredBy() {
     if ((S.powered_by_enabled ?? '1') === '0') return '<span class="m-brand"></span>';
     const name = (S.product_name && S.product_name.trim()) || 'Wisply';
-    const word = { he:'מופעל ע״י', en:'Powered by', ru:'Работает на' }[lang] || 'Powered by';
+    const word = { he:'מופעל ע״י', en:'Powered by', ru:'Работает на', ar:'مشغّل بواسطة' }[lang] || 'Powered by';
     return `<span class="m-brand">${word} ${esc(name)}</span>`;
   }
 
@@ -290,6 +340,21 @@
 
     $id('m-fab')?.addEventListener('click', toggle);
     $id('m-close')?.addEventListener('click', close);
+
+    // Scroll isolation. Some host sites run a smooth-scroll / scroll-hijack library
+    // (Lenis, Locomotive, fullPage, page-builder motion effects) that listens on
+    // window/document and preventDefaults wheel/touch globally — which freezes
+    // scrolling INSIDE our widget too, in BOTH axes (the classic "can't scroll the chat
+    // at all" on some sites). Stop these events from bubbling out of the message area so
+    // the page handler never sees them; the browser still scrolls our own containers
+    // (the vertical list and the horizontal product carousel) natively. One listener on
+    // the container covers its children, including carousels added later.
+    const msgsEl = $id('m-msgs');
+    if (msgsEl) {
+      ['wheel', 'touchstart', 'touchmove'].forEach(evt =>
+        msgsEl.addEventListener(evt, e => e.stopPropagation(), { passive: true })
+      );
+    }
 
     const ta  = $id('m-textarea');
     const snd = $id('m-send');
@@ -419,7 +484,8 @@
     return ({
       he: 'היי 👋 אשמח לתת לך עוד פרטים על ' + subject + '. יש לך שאלה?',
       en: 'Hi 👋 Happy to tell you more about ' + subject + '. Any questions?',
-      ru: 'Здравствуйте 👋 Расскажу подробнее о ' + subject + '. Есть вопросы?'
+      ru: 'Здравствуйте 👋 Расскажу подробнее о ' + subject + '. Есть вопросы?',
+      ar: 'مرحبًا 👋 يسعدني أن أخبرك المزيد عن ' + subject + '. هل لديك سؤال؟'
     }[lang]) || '';
   }
 
@@ -459,7 +525,7 @@
     el.setAttribute('tabindex', '0');
     el.innerHTML =
       `<button class="m-teaser-x" id="m-teaser-x" aria-label="סגור">✕</button>
-       <div class="m-teaser-av">${ICO_BOT}</div>
+       <div class="m-teaser-av">${avatarHtml()}</div>
        <div class="m-teaser-text">${esc(msg)}</div>`;
     shadow.appendChild(el);
 
@@ -573,6 +639,8 @@
       const actionMatch = reply.match(/\[ACTION:([a-z_]+)\]/i);
       const optsMatch   = reply.match(/\[OPTIONS:([^\]]+)\]/i);
       const prodMatch   = reply.match(/\[PRODUCTS:([^\]]+)\]/i);
+      const suggestMatch= reply.match(/\[SUGGEST:([^\]]+)\]/i);
+      const wantsOrderForm = /\[ORDER_FORM\]/i.test(reply);
       const askLead     = /\[ASK_LEAD\]/i.test(reply);
       const showForm    = /\[SHOW_LEAD_FORM\]/i.test(reply);
       const emergency   = /\[EMERGENCY\]/i.test(reply);
@@ -581,6 +649,8 @@
         .replace(/\[ACTION:[a-z_]+\]/ig, '')
         .replace(/\[OPTIONS:[^\]]+\]/ig, '')
         .replace(/\[PRODUCTS:[^\]]*\]/ig, '')
+        .replace(/\[SUGGEST:[^\]]*\]/ig, '')
+        .replace(/\[ORDER_FORM\]/ig, '')
         .replace(/\[ASK_LEAD\]/ig, '')
         .replace(/\[SHOW_LEAD_FORM\]/ig, '')
         .replace(/\[EMERGENCY\]/ig, '')
@@ -590,7 +660,20 @@
       const ended = !!d.conversation_ended;
 
       botMsg(cleanReply);
-      if (prodMatch)  productCards(parseIds(prodMatch[1]));
+      // Product cards: the model's explicit [PRODUCTS:] selection wins; otherwise the
+      // server's product_ids, but ONLY when it flagged show_products (a real shopping
+      // intent — browse / price / category / buy / order). Plain info answers set
+      // show_products=false, so they no longer drag a carousel along. This restores
+      // carousels for genuine product queries without depending on the model's marker.
+      const cardIds = prodMatch
+        ? parseIds(prodMatch[1])
+        : (d.show_products && Array.isArray(d.product_ids) ? d.product_ids : []);
+      if (cardIds.length) productCards(cardIds);
+      // Complementary picks for the bundle flow — but only once the guiding questions
+      // are done. If this reply still asks a question ([OPTIONS] present), hold the
+      // results back so we never show products before the customer answered.
+      if (suggestMatch && !optsMatch) productSuggest(suggestMatch[1].trim());
+      if (wantsOrderForm && !ended) orderStatusForm();
       if (emergency)  emergencyButtons();
       // Follow-up prompts would be dead ends once the conversation is over
       if (!ended) {
@@ -842,11 +925,11 @@
     if (!url) return;
 
     const labels = {
-      donate:    { he:'💝 למעבר לדף התרומות', en:'💝 Go to donations', ru:'💝 Перейти к пожертвованиям' },
-      jobs:      { he:'💼 לדף הדרושים',        en:'💼 View job openings', ru:'💼 Вакансии' },
-      podcast:   { he:'🎧 להאזנה לפודקאסט',     en:'🎧 Listen to the podcast', ru:'🎧 Слушать подкаст' },
-      volunteer: { he:'🤝 להתנדבות',           en:'🤝 Volunteer', ru:'🤝 Стать волонтёром' },
-      contact:   { he:'📞 ליצירת קשר',         en:'📞 Contact us', ru:'📞 Связаться' },
+      donate:    { he:'💝 למעבר לדף התרומות', en:'💝 Go to donations', ru:'💝 Перейти к пожертвованиям', ar:'💝 الانتقال إلى صفحة التبرعات' },
+      jobs:      { he:'💼 לדף הדרושים',        en:'💼 View job openings', ru:'💼 Вакансии', ar:'💼 صفحة الوظائف' },
+      podcast:   { he:'🎧 להאזנה לפודקאסט',     en:'🎧 Listen to the podcast', ru:'🎧 Слушать подкаст', ar:'🎧 الاستماع إلى البودكاست' },
+      volunteer: { he:'🤝 להתנדבות',           en:'🤝 Volunteer', ru:'🤝 Стать волонтёром', ar:'🤝 التطوع' },
+      contact:   { he:'📞 ליצירת קשר',         en:'📞 Contact us', ru:'📞 Связаться', ar:'📞 التواصل معنا' },
     };
     const label = (labels[key] || {})[lang] || (labels[key] || {}).he || key;
 
@@ -867,17 +950,36 @@
 
   const VISUAL_SEARCH  = (S.woo_visual_search ?? '0') === '1';
   const WOO_SHOW_STOCK = (S.woo_show_stock ?? '1') !== '0';
+  const WOO_BUNDLE     = (S.woo_bundle_enabled ?? '1') !== '0';
   const MAX_IMG_BYTES  = 2 * 1024 * 1024;
+  // Remembered from the last product carousel, so the bundle button can tell the AI
+  // which category to complement.
+  let lastShownCategory = '';
 
   const WOO_T = {
     img_search:  'חיפוש מוצר לפי תמונה',
     searching:   'מחפש מוצרים דומים…',
     view:        'לצפייה במוצר',
+    all_cat:     'לכל הקטגוריה',
+    bundle_cta:  '✨ שאתאים לך מוצר משלים?',
+    bundle_msg:  'אשמח שתמליץ לי על מוצר משלים שילך יחד עם מה שהצגת',
     variations:  'כמה אפשרויות זמינות',
     instock:     'במלאי',
     outofstock:  'אזל מהמלאי',
     onbackorder: 'בהזמנה מראש',
     too_big:     'התמונה גדולה מדי (עד 2MB). אפשר לנסות תמונה קטנה יותר.',
+    ord_number:  'מספר הזמנה',
+    ord_email:   'המייל שאיתו הזמנת',
+    ord_check:   'בדיקת סטטוס',
+    ord_checking:'בודק...',
+    ord_none:    'לא מצאתי הזמנה שמתאימה למספר ולמייל שהוזנו. כדאי לבדוק שוב את מספר ההזמנה ואת המייל שאיתו בוצעה ההזמנה.',
+    ord_err:     'לא הצלחתי לבדוק כרגע. אפשר לנסות שוב עוד רגע.',
+    ord_status:  'סטטוס',
+    ord_date:    'תאריך',
+    ord_total:   'סכום',
+    ord_items:   'פריטים',
+    ord_track:   'מספר מעקב',
+    ord_missing: 'צריך גם מספר הזמנה וגם מייל.',
   };
 
   /* "12, 34" → [12,34] — tolerant of spaces and stray separators */
@@ -899,15 +1001,122 @@
     } catch {}
   }
 
-  function renderProducts(products) {
+  /* Fetch complementary products for the AI's [SUGGEST: terms] and render them. */
+  async function productSuggest(query) {
+    if (!query || !$id('m-msgs')) return;
+    try {
+      const res = await fetch(CFG.apiUrl + '/product-query', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'X-WP-Nonce': CFG.nonce },
+        body: JSON.stringify({ query }),
+      });
+      if (!res.ok) return;
+      const d = await res.json();
+      // This IS the complementary result — no second bundle button on it.
+      renderProducts(Array.isArray(d.products) ? d.products : [], { noBundle: true });
+    } catch {}
+  }
+
+  function renderProducts(products, opts) {
     const msgs = $id('m-msgs');
     if (!msgs || !products.length) return;
+    const allowBundle = !(opts && opts.noBundle);
+
+    // Outer column: carousel → scroll dots → "view category" button.
+    const box = document.createElement('div');
+    box.className = 'm-products-box';
+    box.style.cssText = 'flex:0 0 auto;align-self:stretch;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;margin:2px 0 4px';
+
     const wrap = document.createElement('div');
     wrap.className = 'm-products';
-    wrap.style.cssText = 'display:flex;gap:10px;overflow-x:auto;padding:2px 2px 8px;margin:2px 0 4px;scrollbar-width:thin;-webkit-overflow-scrolling:touch';
+    // flex:0 0 auto is load-bearing: .m-msgs is a flex column, and this wrap's
+    // overflow-x:auto makes it a scroll container whose auto min-height resolves to
+    // 0 — so as a shrinkable column child it would collapse under vertical pressure,
+    // squashing the cards to an image sliver (name/price/button clipped by the card's
+    // overflow:hidden). Pinning flex-shrink:0 keeps the row at its natural height.
+    // touch-action:pan-x is load-bearing on mobile — without it this horizontal scroller
+    // swallows vertical finger-drags, so the visitor can't scroll the conversation up
+    // when their finger lands on the carousel. pan-x keeps horizontal here, hands vertical
+    // to the message list.
+    wrap.style.cssText = 'flex:0 0 auto;display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;touch-action:pan-x;padding:2px 2px 4px;scrollbar-width:thin;-webkit-overflow-scrolling:touch';
     wrap.innerHTML = products.map(productCard).join('');
-    msgs.appendChild(wrap);
+    box.appendChild(wrap);
+
+    // Scroll-position dots — only meaningful with more than one card.
+    if (products.length > 1) {
+      const dots = document.createElement('div');
+      dots.style.cssText = 'display:flex;justify-content:center;gap:6px;padding:1px 0';
+      dots.innerHTML = products.map((_, i) =>
+        `<span data-i="${i}" style="width:6px;height:6px;border-radius:50%;background:var(--c-gray-300);transition:background .2s,transform .2s"></span>`
+      ).join('');
+      box.appendChild(dots);
+      const dotEls = Array.from(dots.children);
+      const paint = () => {
+        const first = wrap.firstElementChild;
+        if (!first) return;
+        const step = first.getBoundingClientRect().width + 10; // card width + gap
+        let idx = step > 0 ? Math.round(wrap.scrollLeft / step) : 0;
+        idx = Math.max(0, Math.min(dotEls.length - 1, idx));
+        dotEls.forEach((d, i) => {
+          const on = i === idx;
+          d.style.background = on ? 'var(--c-teal-600)' : 'var(--c-gray-300)';
+          d.style.transform  = on ? 'scale(1.35)' : 'none';
+        });
+      };
+      wrap.addEventListener('scroll', paint, { passive: true });
+      paint();
+    }
+
+    // "View category" button — the category shared by the most products.
+    const cat = dominantCategory(products);
+    lastShownCategory = cat ? cat.name : '';
+    if (cat) box.appendChild(categoryLink(cat));
+
+    // Cross-sell: offer to match a complementary product (admin-toggle). Never on a
+    // carousel that IS itself a complementary suggestion.
+    if (WOO_BUNDLE && allowBundle && !chatEnded) box.appendChild(bundleButton());
+
+    msgs.appendChild(box);
     scroll(msgs);
+    // Images load async and grow the row after the first scroll — re-scroll each time
+    // one lands, but ONLY if the visitor is still near the bottom. Otherwise an image
+    // finishing while they scrolled up to read would yank them back down.
+    wrap.querySelectorAll('img').forEach(img => {
+      img.addEventListener('load', () => { if (nearBottom(msgs)) scroll(msgs); }, { once: true });
+    });
+  }
+
+  /* The category most of these products share, as {name,url} (or null). */
+  function dominantCategory(products) {
+    const tally = {};
+    products.forEach(p => (p.cat_links || []).forEach(c => {
+      if (!c || !c.url) return;
+      (tally[c.url] = tally[c.url] || { name: c.name, url: c.url, n: 0 }).n++;
+    }));
+    return Object.values(tally).sort((a, b) => b.n - a.n)[0] || null;
+  }
+
+  /* Outlined link to a category's archive page. */
+  function categoryLink(cat) {
+    const a = document.createElement('a');
+    a.href = cat.url; a.target = '_blank'; a.rel = 'noopener';
+    a.style.cssText = 'display:block;text-align:center;background:var(--c-teal-50);color:var(--c-teal-700);border:1.5px solid var(--c-teal-600);font-size:12.5px;font-weight:700;text-decoration:none;padding:9px 12px;border-radius:10px';
+    a.textContent = `${WOO_T.all_cat} ${cat.name}`.trim();
+    return a;
+  }
+
+  /* Cross-sell: asks the AI to match a complementary product. */
+  function bundleButton() {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.style.cssText = 'display:block;width:100%;text-align:center;background:var(--c-teal-600);color:#fff;border:0;font-size:12.5px;font-weight:700;padding:10px 12px;border-radius:10px;cursor:pointer';
+    b.textContent = WOO_T.bundle_cta;
+    b.addEventListener('click', () => {
+      b.remove();
+      const ctx = lastShownCategory ? `${WOO_T.bundle_msg} (${lastShownCategory})` : WOO_T.bundle_msg;
+      sendText(ctx);
+    }, { once: true });
+    return b;
   }
 
   function productCard(p) {
@@ -943,6 +1152,73 @@
     const color = on ? '#0a7a34' : status === 'onbackorder' ? '#8a5a00' : '#b3261e';
     const bg    = on ? 'rgba(10,122,52,.10)' : status === 'onbackorder' ? 'rgba(138,90,0,.10)' : 'rgba(179,38,30,.10)';
     return `<span style="align-self:flex-start;font-size:10.5px;font-weight:700;color:${color};background:${bg};padding:2px 7px;border-radius:20px">${label}</span>`;
+  }
+
+  /* ─ Order status: order # + email → secure status lookup ─ */
+  function orderStatusForm() {
+    const msgs = $id('m-msgs');
+    if (!msgs) return;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:8px;background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:12px;margin:2px 0 4px';
+    const inp = 'width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid var(--c-gray-200);border-radius:9px;font-family:var(--font);font-size:13px';
+    wrap.innerHTML =
+      `<input type="text"  class="mo-num"  inputmode="numeric" placeholder="${esc(WOO_T.ord_number)}" style="${inp};direction:rtl">
+       <input type="email" class="mo-mail" dir="ltr" placeholder="${esc(WOO_T.ord_email)}" style="${inp}">
+       <button type="button" class="mo-go" style="background:var(--c-teal-600);color:#fff;border:0;font-size:13px;font-weight:700;padding:10px;border-radius:9px;cursor:pointer">${esc(WOO_T.ord_check)}</button>`;
+    msgs.appendChild(wrap);
+    scroll(msgs);
+
+    const numEl = wrap.querySelector('.mo-num');
+    const mailEl = wrap.querySelector('.mo-mail');
+    const btn = wrap.querySelector('.mo-go');
+    btn.addEventListener('click', async () => {
+      const order_id = numEl.value.trim(), email = mailEl.value.trim();
+      numEl.style.borderColor  = order_id ? '' : '#e0245e';
+      mailEl.style.borderColor = email ? '' : '#e0245e';
+      if (!order_id || !email) return;
+      btn.disabled = true; btn.textContent = WOO_T.ord_checking;
+      try {
+        const res = await fetch(CFG.apiUrl + '/order-status', {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json', 'X-WP-Nonce': CFG.nonce },
+          body: JSON.stringify({ order_id, email }),
+        });
+        const d = res.ok ? await res.json() : null;
+        wrap.remove();
+        if (!d) { botMsg(WOO_T.ord_err); return; }
+        if (!d.found) { botMsg(WOO_T.ord_none); return; }
+        renderOrderStatus(d.order);
+      } catch {
+        btn.disabled = false; btn.textContent = WOO_T.ord_check;
+        botMsg(WOO_T.ord_err);
+      }
+    });
+  }
+
+  function renderOrderStatus(o) {
+    const msgs = $id('m-msgs');
+    if (!msgs || !o) return;
+    const items = (o.items || []).map(it =>
+      `<div style="font-size:12px;opacity:.8">• ${esc(it.name)}${it.qty > 1 ? ' ×' + it.qty : ''}</div>`).join('');
+    const track = (o.tracking || []).map(t => {
+      const label = `${esc(WOO_T.ord_track)}: ${esc(t.number)}${t.provider ? ' (' + esc(t.provider) + ')' : ''}`;
+      return t.url
+        ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--c-teal-600);font-weight:700;text-decoration:none">${label}</a>`
+        : `<div style="font-size:12px;font-weight:700">${label}</div>`;
+    }).join('');
+    const card = document.createElement('div');
+    card.style.cssText = 'display:flex;flex-direction:column;gap:6px;background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:12px;margin:2px 0 4px';
+    card.innerHTML =
+      `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+         <span style="font-weight:700;font-size:13px">${esc(WOO_T.ord_number)} ${esc(o.number)}</span>
+         <span style="background:var(--c-teal-50);color:var(--c-teal-700);font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap">${esc(o.status_label)}</span>
+       </div>
+       ${o.date ? `<div style="font-size:12px;opacity:.75">${esc(WOO_T.ord_date)}: ${esc(o.date)}</div>` : ''}
+       ${items ? `<div style="border-top:1px solid rgba(0,0,0,.06);padding-top:6px">${items}</div>` : ''}
+       ${o.total ? `<div style="font-size:12.5px;font-weight:700;color:var(--c-teal-700)">${esc(WOO_T.ord_total)}: ${esc(o.total)}</div>` : ''}
+       ${track ? `<div style="border-top:1px solid rgba(0,0,0,.06);padding-top:6px">${track}</div>` : ''}`;
+    msgs.appendChild(card);
+    scroll(msgs);
   }
 
   /* ─ Visual search: pick an image → find lookalike products ─ */
@@ -1102,7 +1378,7 @@
   let audioCtx = null;
   let speakMode = sessionStorage.getItem('wisply_speak') === '1';
 
-  const localeFor = l => l === 'en' ? 'en-US' : l === 'ru' ? 'ru-RU' : 'he-IL';
+  const localeFor = l => l === 'en' ? 'en-US' : l === 'ru' ? 'ru-RU' : l === 'ar' ? 'ar-SA' : 'he-IL';
 
   function toggleListen() {
     if (!MIC_AVAILABLE) return;
@@ -1292,7 +1568,8 @@
   function micDeniedMsg() {
     return { he:'🎤 לא ניתנה הרשאה למיקרופון. אפשר להפעיל אותה בהגדרות הדפדפן.',
              en:'🎤 Microphone permission was denied. You can enable it in your browser settings.',
-             ru:'🎤 Доступ к микрофону запрещён. Включите его в настройках браузера.' }[lang] || '';
+             ru:'🎤 Доступ к микрофону запрещён. Включите его в настройках браузера.',
+             ar:'🎤 لم يتم منح إذن الميكروفون. يمكنك تفعيله من إعدادات المتصفح.' }[lang] || '';
   }
 
   /* ── Immersive Voice Mode (ChatGPT-style hands-free call) ───────────────────
@@ -1827,8 +2104,9 @@
 
   /* ── Helpers ── */
   function scroll(el) { requestAnimationFrame(() => el.scrollTop = el.scrollHeight); }
+  function nearBottom(el) { return el.scrollHeight - el.scrollTop - el.clientHeight < 80; }
   function autoH(el)  { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 96) + 'px'; }
-  function clock()    { return new Date().toLocaleTimeString(lang==='ru'?'ru-RU':lang==='en'?'en-US':'he-IL', {hour:'2-digit', minute:'2-digit'}); }
+  function clock()    { return new Date().toLocaleTimeString(localeFor(lang), {hour:'2-digit', minute:'2-digit'}); }
   function esc(s)     { return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function fmt(s)     { return esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>'); }
 

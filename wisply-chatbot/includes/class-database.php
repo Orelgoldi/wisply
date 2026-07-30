@@ -26,11 +26,26 @@ class Wisply_Database {
     // ─── Lifecycle ────────────────────────────────────────────────────────────
 
     public static function activate(): void {
-        self::get_instance()->create_tables();
-        self::get_instance()->seed_default_settings();
-        self::get_instance()->autofill_branding_from_site();
-        self::get_instance()->schedule_cleanup();
-        self::get_instance()->schedule_reindex();
+        $inst = self::get_instance();
+        $inst->create_tables();
+        $inst->seed_default_settings();
+        $inst->autofill_branding_from_site();
+        $inst->schedule_cleanup();
+        $inst->schedule_reindex();
+
+        // First-run setup wizard gate. Only a brand-new, unconfigured install is pushed
+        // into the wizard; an existing install (has indexed content or an AI key) is
+        // marked complete so it is never nagged and its behaviour is unchanged.
+        if ( get_option( 'wisply_setup_complete', '' ) === '' ) {
+            $configured = $inst->get_content_count() > 0
+                || (string) $inst->get_setting( 'openai_api_key', '' ) !== ''
+                || (string) $inst->get_setting( 'ai_api_key', '' ) !== '';
+            update_option( 'wisply_setup_complete', $configured ? '1' : '0' );
+            if ( ! $configured ) {
+                set_transient( 'wisply_activation_redirect', 1, 60 );
+            }
+        }
+
         // Flush rewrite rules so REST routes register immediately
         flush_rewrite_rules();
     }
@@ -157,10 +172,18 @@ class Wisply_Database {
             'ai_model'          => 'claude-sonnet-4-6',
             'openai_api_key'    => '',
             'openai_model'      => 'gpt-4o',
+            'ai_custom_rules'   => '',          // per-site rules/persona/matching logic — injected into the prompt
+            // Cheaper models used ONLY while a free trial is active (read by Wisply_Trial).
+            // Premium/configured models above are reserved for paid installs.
+            'trial_model_openai' => 'gpt-4o-mini',
+            'trial_model_claude' => 'claude-3-5-haiku-latest',
+
             'primary_color'     => '#00A3A3',
             'secondary_color'   => '#007878',
             'font_family'       => 'Open Sans Hebrew, sans-serif',
             'bubble_position'   => 'bottom-right',
+            'bot_avatar'        => 'av-1',      // character avatar (av-1…av-12), legacy icon key, or 'custom'
+            'bot_avatar_url'    => '',          // custom avatar image URL (when bot_avatar = 'custom')
             'greeting_he'       => 'שלום 👋 אני העוזר החכם של האתר. אשמח לעזור בכל שאלה.',
             'greeting_en'       => 'Hi 👋 I\'m the site\'s smart assistant. How can I help you today?',
             'greeting_ru'       => 'Здравствуйте 👋 Я умный помощник сайта. Чем могу помочь?',
@@ -217,6 +240,8 @@ class Wisply_Database {
             'woo_max_products'   => '4',
             'woo_show_stock'     => '1',
             'woo_visual_search'  => '0',
+            'woo_bundle_enabled' => '1',   // offer a complementary-product match after showing cards
+            'woo_order_status_enabled' => '1',   // let customers check order status by order # + email
             // Lead form fields, end-of-conversation CTA and message limit
             'lead_field_name'    => 'required',   // required | optional | hidden
             'lead_field_phone'   => 'required',   // required | optional | hidden
@@ -454,20 +479,22 @@ class Wisply_Database {
         $all = $this->get_all_settings();
         return array_intersect_key( $all, array_flip( [
             'primary_color', 'secondary_color', 'font_family', 'bubble_position',
-            'greeting_he', 'greeting_en', 'greeting_ru',
-            'widget_title_he', 'widget_title_en', 'widget_title_ru',
+            'bot_avatar', 'bot_avatar_url',
+            'enabled_langs', 'default_lang',
+            'greeting_he', 'greeting_en', 'greeting_ru', 'greeting_ar',
+            'widget_title_he', 'widget_title_en', 'widget_title_ru', 'widget_title_ar',
             'phone', 'map_url', 'action_links', 'action_buttons',
             'product_name', 'powered_by_enabled', 'bot_name', 'business_name',
-            'suggested_questions_he', 'suggested_questions_en', 'suggested_questions_ru',
+            'suggested_questions_he', 'suggested_questions_en', 'suggested_questions_ru', 'suggested_questions_ar',
             'voice_enabled', 'voice_provider', 'realtime_enabled', 'voice_text_mode',
             'proactive_enabled', 'proactive_delay',
-            'proactive_msg_he', 'proactive_msg_en', 'proactive_msg_ru',
+            'proactive_msg_he', 'proactive_msg_en', 'proactive_msg_ru', 'proactive_msg_ar',
             'desktop_autoopen_enabled', 'desktop_autoopen_delay',
-            'desktop_autoopen_msg_he', 'desktop_autoopen_msg_en', 'desktop_autoopen_msg_ru',
+            'desktop_autoopen_msg_he', 'desktop_autoopen_msg_en', 'desktop_autoopen_msg_ru', 'desktop_autoopen_msg_ar',
             'consent_required', 'consent_version',
-            'consent_text_he', 'consent_text_en', 'consent_text_ru',
+            'consent_text_he', 'consent_text_en', 'consent_text_ru', 'consent_text_ar',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
-            'woo_enabled', 'woo_show_stock', 'woo_visual_search',
+            'woo_enabled', 'woo_show_stock', 'woo_visual_search', 'woo_bundle_enabled', 'woo_order_status_enabled',
             'lead_field_name', 'lead_field_phone', 'lead_field_email',
             'conversation_end_action', 'max_messages', 'wrapup_margin',
         ] ) );
@@ -640,6 +667,35 @@ class Wisply_Database {
         );
     }
 
+    /** Conversations per day for the last N days. Returns [ 'Y-m-d' => count ]. */
+    public function get_conversations_by_day( int $days = 30 ): array {
+        $conv  = $this->db->prefix . self::TABLE_CONVERSATIONS;
+        $days  = max( 1, min( 365, $days ) );
+        $since = gmdate( 'Y-m-d 00:00:00', time() - ( $days - 1 ) * DAY_IN_SECONDS );
+        $rows  = (array) $this->db->get_results(
+            $this->db->prepare(
+                "SELECT DATE(started_at) d, COUNT(*) c FROM $conv WHERE started_at >= %s GROUP BY DATE(started_at)",
+                $since
+            ),
+            ARRAY_A
+        );
+        $out = [];
+        foreach ( $rows as $r ) { $out[ (string) $r['d'] ] = (int) $r['c']; }
+        return $out;
+    }
+
+    /** Chat volume by weekday (0=Mon … 6=Sun) × hour (0-23), for the activity heatmap. */
+    public function get_activity_heatmap(): array {
+        $conv = $this->db->prefix . self::TABLE_CONVERSATIONS;
+        $rows = (array) $this->db->get_results(
+            "SELECT WEEKDAY(started_at) wd, HOUR(started_at) h, COUNT(*) c FROM $conv GROUP BY wd, h",
+            ARRAY_A
+        );
+        $grid = [];
+        foreach ( $rows as $r ) { $grid[ (int) $r['wd'] ][ (int) $r['h'] ] = (int) $r['c']; }
+        return $grid;
+    }
+
     public function export_conversations_csv( array $filters = [] ): string {
         $conv = $this->db->prefix . self::TABLE_CONVERSATIONS;
         $msg  = $this->db->prefix . self::TABLE_MESSAGES;
@@ -794,6 +850,23 @@ class Wisply_Database {
     public function get_content_count(): int {
         $idx = $this->db->prefix . self::TABLE_CONTENT_INDEX;
         return (int) $this->db->get_var( "SELECT COUNT(*) FROM $idx" );
+    }
+
+    /** The indexed content of one specific post/page (for "the page the visitor is on"). */
+    public function get_content_by_post( int $post_id, string $lang = 'he' ): ?array {
+        if ( $post_id <= 0 ) return null;
+        $idx = $this->db->prefix . self::TABLE_CONTENT_INDEX;
+        $row = $this->db->get_row(
+            $this->db->prepare( "SELECT title, content, url FROM $idx WHERE post_id = %d AND lang = %s LIMIT 1", $post_id, $lang ),
+            ARRAY_A
+        );
+        if ( ! $row ) {
+            $row = $this->db->get_row(
+                $this->db->prepare( "SELECT title, content, url FROM $idx WHERE post_id = %d LIMIT 1", $post_id ),
+                ARRAY_A
+            );
+        }
+        return $row ?: null;
     }
 
     public function get_indexed_list( string $search = '', int $page = 1, int $per_page = 25 ): array {

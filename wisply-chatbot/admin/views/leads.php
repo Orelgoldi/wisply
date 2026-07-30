@@ -62,7 +62,13 @@ $total = count( $leads );
     $n_all = count( $leads_all );
     $n_job = count( array_filter( $leads_all, fn( $l ) => ( $l['lead_type'] ?? 'marketing' ) === 'job' ) );
     $n_mkt = $n_all - $n_job;
-    $tabs = [ '' => "הכל ($n_all)", 'marketing' => "🎯 שיווקי ($n_mkt)", 'job' => "💼 דרושים ($n_job)" ];
+    // Only split into marketing / jobs when jobs leads actually exist. A business with
+    // no careers flow never gets a "דרושים" tab forced on it — it just sees "הכל".
+    $tabs = [ '' => "הכל ($n_all)" ];
+    if ( $n_job > 0 ) {
+        $tabs['marketing'] = "🎯 שיווקי ($n_mkt)";
+        $tabs['job']       = "💼 דרושים ($n_job)";
+    }
     ?>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         <?php foreach ( $tabs as $key => $label ) :
@@ -96,7 +102,9 @@ $total = count( $leads );
                     <td style="white-space:nowrap"><?php echo esc_html( $l['time'] ?? '' ); ?></td>
                     <td><strong><?php echo esc_html( $l['name'] ?? '' ); ?></strong>
                         <?php $lt = $l['lead_type'] ?? 'marketing'; ?>
+                        <?php if ( $n_job > 0 ) : // only tag the type when there's actually a mix ?>
                         <br><span style="font-size:11px;padding:1px 7px;border-radius:6px;<?php echo $lt === 'job' ? 'background:#eef2ff;color:#4338ca' : 'background:#E0F5F5;color:#007878'; ?>"><?php echo $lt === 'job' ? '💼 דרושים' : '🎯 שיווקי'; ?></span>
+                        <?php endif; ?>
                     </td>
                     <td><a href="tel:<?php echo esc_attr( preg_replace( '/[^\d+]/', '', $l['phone'] ?? '' ) ); ?>"><?php echo esc_html( $l['phone'] ?? '' ); ?></a></td>
                     <td><?php echo $l['email'] ? '<a href="mailto:' . esc_attr( $l['email'] ) . '">' . esc_html( $l['email'] ) . '</a>' : '—'; ?></td>

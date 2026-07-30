@@ -121,6 +121,29 @@ class Wisply_Chatbot_API {
             ],
         ] );
 
+        // Public: text product query for the model's [SUGGEST: ...] marker — powers the
+        // complementary-product ("bundle") flow. Query in, matching product cards out.
+        register_rest_route( $ns, '/product-query', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'handle_product_query' ],
+            'permission_callback' => [ $this, 'rate_limit_check' ],
+            'args'                => [
+                'query' => [ 'required' => true, 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ],
+            ],
+        ] );
+
+        // Public: order status lookup for the "where's my order" flow. Requires BOTH
+        // order number and matching billing email (anti-enumeration), rate-limited.
+        register_rest_route( $ns, '/order-status', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'handle_order_status' ],
+            'permission_callback' => [ $this, 'rate_limit_check' ],
+            'args'                => [
+                'order_id' => [ 'required' => true, 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ],
+                'email'    => [ 'required' => true, 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ],
+            ],
+        ] );
+
         // Public: visual product search — image in, matching products out
         register_rest_route( $ns, '/product-image-search', [
             'methods'             => 'POST',
@@ -227,6 +250,45 @@ class Wisply_Chatbot_API {
         // Get or create the session's conversation
         $conv_id = $this->db->get_or_create_conversation( $session_id, $lang, $ip_hash, $page_url );
 
+        // ── Free-trial gate (Wisply product monetization) ──
+        // Inert unless a trial has actually been started by the setup wizard (status
+        // '' / 'converted' → skipped entirely), so existing/paid installs are untouched.
+        // The hard cap counts VISITOR-driven conversations (the first user message of a
+        // session's conversation), never bot replies, and blocks the AI call the moment
+        // the 14-day window or the 100-conversation cap is exceeded.
+        if ( class_exists( 'Wisply_Trial' ) ) {
+            $trial = Wisply_Trial::get_instance();
+            if ( $trial->is_trial_mode() ) {
+                $is_new_convo = $this->count_user_turns( $conv_id ) === 0;
+
+                // Trial already over (time or cap) — pause gracefully, retain all data.
+                if ( ! $trial->is_active() ) {
+                    $trial->mark_ended();
+                    return new WP_REST_Response( [
+                        'reply'              => $trial->upgrade_message( $lang ),
+                        'conversation_ended' => true,
+                        'trial_ended'        => true,
+                        'sources'            => [],
+                    ], 200 );
+                }
+
+                // A brand-new conversation consumes one trial credit. If none remain,
+                // this new conversation tips the trial over its cap → end it now.
+                if ( $is_new_convo ) {
+                    if ( $trial->conversations_left() <= 0 ) {
+                        $trial->mark_ended();
+                        return new WP_REST_Response( [
+                            'reply'              => $trial->upgrade_message( $lang ),
+                            'conversation_ended' => true,
+                            'trial_ended'        => true,
+                            'sources'            => [],
+                        ], 200 );
+                    }
+                    $trial->increment_conversation();
+                }
+            }
+        }
+
         // Message limit (0 = unlimited): the turn is the session's USER messages + this one.
         // Only counted when a limit is set, so the default path stays a single-query flow.
         $max_messages = (int) $this->db->get_setting( 'max_messages', '0' );
@@ -247,8 +309,9 @@ class Wisply_Chatbot_API {
         // Store user message
         $this->db->add_message( $conv_id, 'user', $message );
 
-        // Get AI reply — the turn lets the AI converge toward closing near the limit
-        $result = $this->ai->get_reply( $message, $lang, $history, $turn );
+        // Get AI reply — page_url lets the AI ground its answer in the exact page the
+        // visitor is viewing (so it can answer the questions shown on that page).
+        $result = $this->ai->get_reply( $message, $lang, $history, $turn, (string) $page_url );
 
         // Store assistant message, flag unanswered if needed
         $this->db->add_message( $conv_id, 'assistant', $result['reply'], $result['unanswered'] );
@@ -257,6 +320,8 @@ class Wisply_Chatbot_API {
             'reply'              => $result['reply'],
             'unanswered'         => $result['unanswered'],
             'sources'            => $result['sources'] ?? [],
+            'product_ids'        => $result['product_ids'] ?? [],
+            'show_products'      => $result['show_products'] ?? false,
             'conversation_ended' => false,
         ], 200 );
     }
@@ -662,6 +727,49 @@ class Wisply_Chatbot_API {
         return new WP_REST_Response( [ 'products' => $products ], 200 );
     }
 
+    // ─── Public: /product-query (text → products, for [SUGGEST:] bundle flow) ───
+
+    public function handle_product_query( WP_REST_Request $request ): WP_REST_Response {
+        if ( ! class_exists( 'Wisply_Woo' ) || ! Wisply_Woo::get_instance()->is_active() ) {
+            return new WP_REST_Response( [ 'products' => [] ], 200 );
+        }
+
+        $query = trim( (string) $request->get_param( 'query' ) );
+        if ( $query === '' ) {
+            return new WP_REST_Response( [ 'products' => [] ], 200 );
+        }
+
+        $woo    = Wisply_Woo::get_instance();
+        // Honour price/sort/category intent in the model's suggestion when present,
+        // otherwise fall back to the scored text search.
+        $intent = $woo->parse_query_intent( $query );
+        $products = ! empty( $intent['has_filter'] )
+            ? $woo->query_products( $intent, 6 )
+            : $woo->search_products( $query, 6 );
+
+        return new WP_REST_Response( [ 'products' => array_values( $products ) ], 200 );
+    }
+
+    // ─── Public: /order-status (order # + email → safe status summary) ─────────
+
+    public function handle_order_status( WP_REST_Request $request ): WP_REST_Response {
+        $enabled = $this->db->get_setting( 'woo_order_status_enabled', '1' ) === '1';
+        if ( ! $enabled || ! class_exists( 'Wisply_Woo' ) || ! Wisply_Woo::get_instance()->is_active() ) {
+            return new WP_REST_Response( [ 'found' => false ], 200 );
+        }
+
+        // Accept "#1234" / "1234" and similar — pull the numeric id out.
+        $order_id = (int) preg_replace( '/\D+/', '', (string) $request->get_param( 'order_id' ) );
+        $email    = (string) $request->get_param( 'email' );
+
+        $order = Wisply_Woo::get_instance()->lookup_order( $order_id, $email );
+        if ( $order === null ) {
+            // Generic — never reveal whether the id or the email was the mismatch.
+            return new WP_REST_Response( [ 'found' => false ], 200 );
+        }
+        return new WP_REST_Response( [ 'found' => true, 'order' => $order ], 200 );
+    }
+
     // ─── Public: /product-image-search ────────────────────────────────────────
 
     public function handle_product_image_search( WP_REST_Request $request ): WP_REST_Response {
@@ -721,7 +829,7 @@ class Wisply_Chatbot_API {
                     'content' => [
                         [
                             'type' => 'text',
-                            'text' => 'תאר את המוצר בתמונה במילות חיפוש קצרות (סוג הפריט, צבע, חומר, סגנון). החזר רק את מילות החיפוש.',
+                            'text' => "זהה את סוג הפריט בתמונה וכתוב אותו כמילה הראשונה, מתוך: שרשרת, טבעת, עגילים, צמיד, תליון, טבעת (אם זו תכשיט אחר, בחר את הקרוב ביותר). אחרי סוג הפריט הוסף 2-3 מילות תיאור קצרות (חומר/צבע, למשל: זהב, כסף). דוגמה: 'טבעת זהב אבן ירוקה'. החזר רק את המילים, בלי משפט.",
                         ],
                         [
                             'type'      => 'image_url',

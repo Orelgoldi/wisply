@@ -18,6 +18,9 @@ $opt_rate  = $leads_n  ? round( $opt_n / $leads_n * 100 )    : 0;
 $conv_rate = $conv_total ? round( $leads_n / $conv_total * 100 ) : 0;
 $abandoned = max( 0, $conv_total - $leads_n );
 $top_q     = $wisply_db->get_top_user_questions( 8 );
+$days      = isset( $_GET['days'] ) ? max( 7, min( 90, (int) $_GET['days'] ) ) : 30;
+$by_day    = $wisply_db->get_conversations_by_day( $days );
+$heat      = $wisply_db->get_activity_heatmap();
 ?>
 <div class="wrap wisply-admin" dir="rtl">
     <h1>
@@ -25,49 +28,88 @@ $top_q     = $wisply_db->get_top_user_questions( 8 );
         <?php echo esc_html( defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : 'Wisply' ); ?> — לוח בקרה
     </h1>
 
-    <h2 style="margin-top:18px">📊 אנליטיקה</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:8px">
+    <h2>📊 אנליטיקה</h2>
+    <div class="wisply-stats-grid">
         <?php
         $cards = [
             [ 'מספר שיחות', $conv_total, '#00A3A3' ],
             [ 'מספר לידים', $leads_n, '#007878' ],
-            [ 'יחס המרה (ליד/שיחה)', $conv_rate . '%', '#0a8f3c' ],
-            [ 'שיעור Opt-In', $opt_rate . '% (' . $opt_n . ')', '#0a8f3c' ],
-            [ 'שיחות שננטשו (ללא ליד)', $abandoned, '#b08900' ],
+            [ 'יחס המרה (ליד/שיחה)', $conv_rate . '%', '#0f9d64' ],
+            [ 'שיעור Opt-In', $opt_rate . '% (' . $opt_n . ')', '#0f9d64' ],
+            [ 'שיחות שננטשו (ללא ליד)', $abandoned, '#d98324' ],
         ];
         foreach ( $cards as $c ) : ?>
-            <div style="background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px">
-                <div style="font-size:30px;font-weight:800;color:<?php echo esc_attr( $c[2] ); ?>"><?php echo esc_html( $c[1] ); ?></div>
-                <div style="color:#666;font-size:13px;margin-top:4px"><?php echo esc_html( $c[0] ); ?></div>
+            <div class="wisply-stat-card" style="--accent:<?php echo esc_attr( $c[2] ); ?>">
+                <span class="wisply-stat-number"><?php echo esc_html( $c[1] ); ?></span>
+                <span class="wisply-stat-label"><?php echo esc_html( $c[0] ); ?></span>
             </div>
         <?php endforeach; ?>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0 4px">
-        <div style="background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:14px 16px">
+    <div class="wisply-cols2">
+        <div class="wisply-card">
             <strong>🔝 שאלות נפוצות</strong>
             <?php if ( empty( $top_q ) ) : ?>
-                <p style="color:#999;margin:8px 0 0">אין נתונים עדיין.</p>
+                <p style="color:var(--w-mut);margin:0">אין נתונים עדיין.</p>
             <?php else : ?>
-                <ol style="margin:8px 18px 0;padding:0;line-height:1.9">
-                    <?php foreach ( $top_q as $q ) : ?>
-                        <li><?php echo esc_html( $q['content'] ); ?> <span style="color:#999">(<?php echo (int) $q['cnt']; ?>)</span></li>
-                    <?php endforeach; ?>
-                </ol>
+                <ol><?php foreach ( $top_q as $q ) : ?><li><?php echo esc_html( $q['content'] ); ?> <span style="color:var(--w-mut)">(<?php echo (int) $q['cnt']; ?>)</span></li><?php endforeach; ?></ol>
             <?php endif; ?>
         </div>
-        <div style="background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:14px 16px">
+        <div class="wisply-card">
             <strong>🏥 מחלקות מבוקשות (לפי לידים)</strong>
             <?php if ( empty( $depts ) ) : ?>
-                <p style="color:#999;margin:8px 0 0">אין נתונים עדיין.</p>
+                <p style="color:var(--w-mut);margin:0">אין נתונים עדיין.</p>
             <?php else : ?>
-                <ol style="margin:8px 18px 0;padding:0;line-height:1.9">
-                    <?php foreach ( array_slice( $depts, 0, 8, true ) as $d => $n ) : ?>
-                        <li><?php echo esc_html( $d ); ?> <span style="color:#999">(<?php echo (int) $n; ?>)</span></li>
-                    <?php endforeach; ?>
-                </ol>
+                <ol><?php foreach ( array_slice( $depts, 0, 8, true ) as $d => $n ) : ?><li><?php echo esc_html( $d ); ?> <span style="color:var(--w-mut)">(<?php echo (int) $n; ?>)</span></li><?php endforeach; ?></ol>
             <?php endif; ?>
         </div>
+    </div>
+
+    <div class="wisply-card">
+        <div class="wisply-card-head">
+            <strong>📈 שיחות לאורך זמן</strong>
+            <div class="wisply-range">
+                <?php foreach ( [ 7, 30, 90 ] as $r ) : ?>
+                    <a href="<?php echo esc_url( add_query_arg( 'days', $r ) ); ?>" class="<?php echo $days === $r ? 'on' : ''; ?>"><?php echo (int) $r; ?> ימים</a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php $bmax = 1; foreach ( $by_day as $v ) { if ( $v > $bmax ) $bmax = $v; } ?>
+        <?php if ( array_sum( $by_day ) === 0 ) : ?>
+            <div class="wisply-empty">אין עדיין שיחות בטווח הזה.</div>
+        <?php else : ?>
+            <div class="wisply-bars">
+                <?php for ( $i = $days - 1; $i >= 0; $i-- ) :
+                    $d = gmdate( 'Y-m-d', time() - $i * DAY_IN_SECONDS );
+                    $c = $by_day[ $d ] ?? 0; ?>
+                    <div class="wisply-bar" title="<?php echo esc_attr( $d . ' — ' . $c . ' שיחות' ); ?>"><span style="height:<?php echo (int) round( $c / $bmax * 100 ); ?>%"></span></div>
+                <?php endfor; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <div class="wisply-card">
+        <strong>🔥 מתי הגולשים הכי פעילים</strong>
+        <?php
+        $hmax = 1; $any = false;
+        foreach ( $heat as $row ) { foreach ( $row as $v ) { if ( $v > $hmax ) $hmax = $v; if ( $v > 0 ) $any = true; } }
+        ?>
+        <?php if ( ! $any ) : ?>
+            <div class="wisply-empty">אין עדיין מספיק נתונים לניתוח שעות.</div>
+        <?php else :
+            $order = [ 6, 0, 1, 2, 3, 4, 5 ]; $labels = [ 'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש' ]; ?>
+            <div class="wisply-heat" style="margin-top:14px">
+                <?php foreach ( $order as $idx => $wd ) : ?>
+                    <div class="wisply-heat-row">
+                        <span class="wisply-heat-lbl"><?php echo esc_html( $labels[ $idx ] ); ?></span>
+                        <?php for ( $h = 0; $h < 24; $h++ ) : $v = $heat[ $wd ][ $h ] ?? 0; $op = $v ? round( 0.12 + 0.88 * ( $v / $hmax ), 2 ) : 0; ?>
+                            <i style="--v:<?php echo esc_attr( $op ); ?>" title="<?php echo esc_attr( $labels[ $idx ] . ' ' . $h . ':00 — ' . $v . ' שיחות' ); ?>"></i>
+                        <?php endfor; ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <div class="wisply-heat-cap"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:00</span></div>
+        <?php endif; ?>
     </div>
 
     <div class="wisply-stats-grid">

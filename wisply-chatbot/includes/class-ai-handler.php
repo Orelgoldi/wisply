@@ -6,8 +6,17 @@ class Wisply_AI_Handler {
     private static ?self $instance = null;
     private Wisply_Database $db;
 
+    // Short Hebrew note describing the current turn's structured product filter
+    // (price/sort/category), set in get_reply and read by build_system_prompt so the
+    // model phrases "here are rings under ₪300, cheapest first" accurately.
+    private string $product_note = '';
+
+    // True when the first context source is the exact page the visitor is viewing, so
+    // build_system_prompt can tell the model to answer from it first.
+    private bool $page_context = false;
+
     // Language codes as returned by the client
-    private const SUPPORTED_LANGS = [ 'he', 'en', 'ru' ];
+    private const SUPPORTED_LANGS = [ 'he', 'en', 'ru', 'ar' ];
 
     private function __construct() {
         $this->db = Wisply_Database::get_instance();
@@ -31,7 +40,7 @@ class Wisply_AI_Handler {
      * @param int    $turn           How many USER messages this session has, including the current one (0 = unknown).
      * @return array{reply:string, unanswered:bool, sources:array}
      */
-    public function get_reply( string $user_message, string $lang, array $history = [], int $turn = 0 ): array {
+    public function get_reply( string $user_message, string $lang, array $history = [], int $turn = 0, string $page_url = '' ): array {
         $lang = in_array( $lang, self::SUPPORTED_LANGS, true ) ? $lang : 'he';
 
         // Expand the query with synonyms for common intents (location/contact/hours),
@@ -51,16 +60,55 @@ class Wisply_AI_Handler {
         $docs = $this->dedupe_docs( $docs );
         $docs = array_slice( $docs, 0, $limit );
 
+        // The visitor is looking at a specific page. Make ITS indexed content the FIRST,
+        // authoritative source — so a suggested question generated from that page (or any
+        // question asked while viewing it) is answered from the page itself, not from
+        // whatever the keyword search happened to surface. This is the fix for "the bot
+        // can't answer the questions it shows on the page".
+        $this->page_context = false;
+        if ( $page_url !== '' && function_exists( 'url_to_postid' ) ) {
+            $pid = (int) url_to_postid( $page_url );
+            if ( $pid > 0 ) {
+                $page_doc = $this->db->get_content_by_post( $pid, $lang );
+                if ( $page_doc && trim( (string) ( $page_doc['content'] ?? '' ) ) !== '' ) {
+                    $page_url_norm = (string) ( $page_doc['url'] ?? '' );
+                    $docs = array_values( array_filter( $docs, static fn( $d ) => ( $d['url'] ?? '' ) !== $page_url_norm ) );
+                    array_unshift( $docs, $page_doc );
+                    $docs = array_slice( $docs, 0, $limit + 1 );
+                    $this->page_context = true;
+                }
+            }
+        }
+
         // Live WooCommerce products (real-time price/stock/variations) when the module is on
         $products = [];
+        $show_products = false;   // does THIS message actually want the carousel shown?
+        $this->product_note = '';
         if ( class_exists( 'Wisply_Woo' ) && Wisply_Woo::get_instance()->is_active() ) {
             $woo          = Wisply_Woo::get_instance();
-            $max_products = (int) $this->db->get_setting( 'woo_max_products', 4 );
-            $products     = $woo->search_products( $user_message, $max_products );
+            $max_products = (int) $this->db->get_setting( 'woo_max_products', 8 );
+
+            // Structured intent first (price ceiling/range, cheapest/priciest, best-sellers,
+            // scoped to a category) — the plain text search can't express any of these.
+            $intent = $woo->parse_query_intent( $user_message );
+            if ( ! empty( $intent['has_filter'] ) ) {
+                $products = $woo->query_products( $intent, $max_products );
+                $note     = $woo->describe_intent( $intent );
+                if ( ! empty( $products ) && ! empty( $products[0]['is_fallback'] ) ) {
+                    $this->product_note = trim( "לא נמצאו מוצרים בדיוק לפי הבקשה ($note). המוצרים למטה הם הקרובים ביותר במחיר — אמור זאת בכנות והצג אותם כחלופה." );
+                } elseif ( $note !== '' ) {
+                    $this->product_note = "המוצרים למטה נבחרו לפי בקשת הלקוח: $note. הצג אותם ואשר בקצרה שאלה הפריטים לפי הבקשה.";
+                }
+            } else {
+                $products = $woo->search_products( $user_message, $max_products );
+            }
 
             // Similar products for the top hit — powers "מוצרים דומים" suggestions and
             // gives the model alternatives to offer when the match is out of stock.
-            if ( ! empty( $products[0]['id'] ) ) {
+            // Skipped for a filtered query (cheapest / under ₪X / best-sellers): those
+            // results are precise and ordered, and padding them with "related" items
+            // would break the ranking the shopper asked for.
+            if ( empty( $intent['has_filter'] ) && ! empty( $products[0]['id'] ) ) {
                 $seen = array_map( 'intval', array_column( $products, 'id' ) );
                 foreach ( $woo->related_products( (int) $products[0]['id'], 2 ) as $rel ) {
                     if ( empty( $rel['id'] ) || in_array( (int) $rel['id'], $seen, true ) ) continue;
@@ -69,16 +117,37 @@ class Wisply_AI_Handler {
                     $seen[]     = (int) $rel['id'];
                 }
             }
+
+            // Whether to AUTO-show the carousel. Kept deliberately conservative: only an
+            // explicit browse ("show me / what do you have / catalogue / list / all the")
+            // or a price/sort filter. NOT a bare category mention and NOT an "order/book"
+            // verb — "אפשר להזמין הרצאות לארגון?" is a B2B service inquiry, not a request to
+            // dump a catalogue. Everything nuanced (recommend the one nearest lecture, answer
+            // a booking inquiry) is left to the model, which now reliably HAS the products in
+            // context and leads with a specific [PRODUCTS: id] when a recommendation fits.
+            $is_browse = (bool) preg_match( '/הצג|תראה|תראי|להראות|לראות|מה יש|אילו|איזה.{0,12}יש|קטלוג|רשימ|לעיין|כל ה|תן לי לראות/u', $user_message );
+            $show_products = ! empty( $products )
+                && ( ! empty( $intent['has_filter'] ) || $is_browse );
         }
 
-        $provider = $this->db->get_setting( 'ai_provider', 'claude' );
-
-        $result = match ( $provider ) {
-            'openai' => $this->call_openai( $user_message, $lang, $history, $docs, $products, $turn ),
-            default  => $this->call_claude( $user_message, $lang, $history, $docs, $products, $turn ),
-        };
+        // All chat goes through the Wisply AI proxy (2.16.0) — the licence key
+        // is the credential, provider keys no longer exist on this site.
+        $result = $this->call_openai( $user_message, $lang, $history, $docs, $products, $turn );
 
         $result['sources'] = array_map( fn( $d ) => [ 'title' => $d['title'], 'url' => $d['url'] ], $docs );
+
+        // Server-driven product cards. The model is asked to emit [PRODUCTS: ...] but
+        // isn't reliable about it, so we ALSO return the ids the store found. The widget
+        // auto-renders these ONLY when show_products is true (a genuine shopping intent,
+        // decided above) — so plain info answers no longer drag a carousel with them,
+        // while "show me / how much / order X" still gets its cards without depending on
+        // the model remembering the marker.
+        $result['product_ids'] = array_values( array_filter( array_map(
+            static fn( $p ) => isset( $p['id'] ) ? (int) $p['id'] : null,
+            is_array( $products ) ? $products : []
+        ) ) );
+        $result['show_products'] = $show_products;
+
         return $result;
     }
 
@@ -124,6 +193,57 @@ class Wisply_AI_Handler {
         ];
     }
 
+    // ─── Wisply AI Proxy ──────────────────────────────────────────────────────
+    //
+    // As of 2.16.0 the plugin holds NO provider API key. Every AI operation is
+    // sent to the Wisply server with the licence key, and the server executes
+    // it against the customer's dedicated, platform-managed OpenAI project key.
+    // There is nothing to steal from this site's database, and usage is
+    // measured and controlled per customer on the Wisply side.
+
+    private function proxy_base(): string {
+        return untrailingslashit( defined( 'WISPLY_API_URL' ) ? WISPLY_API_URL : 'https://wisply.io' );
+    }
+
+    private function license_key_present(): bool {
+        return class_exists( 'Wisply_License' )
+            && Wisply_License::get_instance()->get_key() !== '';
+    }
+
+    /**
+     * Execute an AI operation through the Wisply proxy.
+     * Responses mirror OpenAI's own shapes, so existing parsing stays intact.
+     */
+    private function proxy_request( string $op, array $payload, int $timeout = 40 ): ?array {
+        $key = class_exists( 'Wisply_License' ) ? Wisply_License::get_instance()->get_key() : '';
+
+        $response = wp_remote_post( $this->proxy_base() . '/api/plugin/ai', [
+            'timeout' => $timeout,
+            'headers' => [ 'Content-Type' => 'application/json' ],
+            'body'    => wp_json_encode( [
+                'key'     => $key,
+                'site'    => home_url(),
+                'op'      => $op,
+                'payload' => $payload,
+            ] ),
+        ] );
+
+        if ( is_wp_error( $response ) ) {
+            $this->record_ai_error( 'proxy/network: ' . $response->get_error_message() );
+            return null;
+        }
+
+        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( ! is_array( $body ) ) {
+            $this->record_ai_error( 'proxy: HTTP ' . wp_remote_retrieve_response_code( $response ) . ' — תגובה לא תקינה' );
+            return null;
+        }
+        if ( isset( $body['error']['message'] ) ) {
+            $this->record_ai_error( 'proxy: ' . $body['error']['message'] );
+        }
+        return $body;
+    }
+
     // ─── Claude (Anthropic) ───────────────────────────────────────────────────
 
     private function call_claude( string $user_message, string $lang, array $history, array $docs, array $products = [], int $turn = 0 ): array {
@@ -132,6 +252,11 @@ class Wisply_AI_Handler {
 
         if ( empty( $api_key ) ) {
             return $this->fallback_no_config( $lang );
+        }
+
+        // During an active free trial, run on the cheaper model (premium is paid-only).
+        if ( class_exists( 'Wisply_Trial' ) ) {
+            $model = Wisply_Trial::get_instance()->effective_model( 'claude', (string) $model );
         }
 
         $system  = $this->build_system_prompt( $lang, $docs, $user_message, $products, $turn );
@@ -174,11 +299,15 @@ class Wisply_AI_Handler {
     // ─── OpenAI ───────────────────────────────────────────────────────────────
 
     private function call_openai( string $user_message, string $lang, array $history, array $docs, array $products = [], int $turn = 0 ): array {
-        $api_key = $this->db->get_setting( 'openai_api_key', '' );
-        $model   = $this->db->get_setting( 'openai_model', 'gpt-4o' );
-
-        if ( empty( $api_key ) ) {
+        if ( ! $this->license_key_present() ) {
             return $this->fallback_no_config( $lang );
+        }
+
+        $model = $this->db->get_setting( 'openai_model', 'gpt-4o' );
+
+        // During an active free trial, run on the cheaper model (premium is paid-only).
+        if ( class_exists( 'Wisply_Trial' ) ) {
+            $model = Wisply_Trial::get_instance()->effective_model( 'openai', (string) $model );
         }
 
         $system   = $this->build_system_prompt( $lang, $docs, $user_message, $products, $turn );
@@ -187,29 +316,12 @@ class Wisply_AI_Handler {
             $this->build_message_array( $history, $user_message )
         );
 
-        $payload = [
+        $body = $this->proxy_request( 'chat', [
             'model'       => $model,
             'max_tokens'  => 1024,
             'messages'    => $messages,
             'temperature' => 0.2,
-        ];
-
-        $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', [
-            'timeout' => 30,
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type'  => 'application/json',
-            ],
-            'body'    => wp_json_encode( $payload ),
         ] );
-
-        if ( is_wp_error( $response ) ) {
-            $this->record_ai_error( 'WP/network: ' . $response->get_error_message() );
-            return [ 'reply' => $this->error_msg( $lang ), 'unanswered' => true ];
-        }
-
-        $code = wp_remote_retrieve_response_code( $response );
-        $body = json_decode( wp_remote_retrieve_body( $response ), true );
 
         if ( isset( $body['choices'][0]['message']['content'] ) ) {
             $reply = trim( $body['choices'][0]['message']['content'] );
@@ -220,10 +332,6 @@ class Wisply_AI_Handler {
             ];
         }
 
-        // Capture the real OpenAI error (e.g. invalid key / insufficient_quota / model access)
-        $err = $body['error']['message']
-            ?? ( 'HTTP ' . $code . ' — ' . substr( (string) wp_remote_retrieve_body( $response ), 0, 300 ) );
-        $this->record_ai_error( $err );
         return [ 'reply' => $this->error_msg( $lang ), 'unanswered' => true ];
     }
 
@@ -241,6 +349,9 @@ class Wisply_AI_Handler {
         $context_block = '';
         if ( ! empty( $docs ) ) {
             $context_block = "\n\n=== תוכן רלוונטי מהאתר ===\n";
+            if ( $this->page_context ) {
+                $context_block .= "(שים לב: [מקור 1] הוא העמוד המדויק שהגולש צופה בו כרגע. אם השאלה נוגעת לעמוד הזה — למשל שאלה שהוצעה לו בעמוד — ענה עליה קודם כל על סמך המקור הזה.)\n";
+            }
             foreach ( $docs as $i => $doc ) {
                 $clean   = preg_replace( '/\s+/u', ' ', strip_tags( $doc['content'] ) );
                 $snippet = $this->relevant_snippet( $clean, $query, 2400 );
@@ -261,21 +372,101 @@ class Wisply_AI_Handler {
         if ( ! empty( $products ) && class_exists( 'Wisply_Woo' ) ) {
             // Card cap must track the admin setting — otherwise an admin who allows 8
             // products still only ever gets 4 cards rendered.
-            $card_cap = max( 1, min( 8, (int) $this->db->get_setting( 'woo_max_products', 4 ) ) );
+            $card_cap = max( 1, min( 12, (int) $this->db->get_setting( 'woo_max_products', 8 ) ) );
+            $filter_note = $this->product_note !== '' ? "הערת סינון: {$this->product_note}\n\n" : '';
             $products_block = "\n\n=== מוצרים מהחנות (נתונים חיים ומעודכנים) ===\n"
+                . $filter_note
                 . Wisply_Woo::get_instance()->format_products_for_prompt( $products, $query )
                 . "\n\nכללי מענה על מוצרים:\n"
+                . "• בבלוק המוצרים למעלה יש פריטים אמיתיים ומעודכנים מהחנות (כולל הרצאות, סדנאות וקורסים). אם השאלה נוגעת לפריט שמופיע בבלוק — ענה ממנו ישירות והצג את הכרטיסים. שמות הפריטים כוללים לעיתים תאריך ומיקום (למשל \"04.08 חולון\"), קרא אותם משם וענה עליהם. **אסור לומר \"אין לי מידע\" ואסור להפנות להשארת פרטים כאשר קיים בבלוק פריט רלוונטי לשאלה.** השארת פרטים היא רק כשאין בבלוק שום פריט מתאים.\n"
+                // The product vision: a proactive salesperson, not a passive catalogue.
+                // Crucial framing: the bot only PRESENTS the product and links to its page;
+                // it never adds to cart or places an order itself. Phrasing must reflect that.
+                . "• היה יזום ומעודד רכישה, כמו איש מכירות חם ולא כמו קטלוג. כשיש פריט אחד שהכי עונה לשאלה (ההרצאה הקרובה ביותר, ההתאמה הטובה ביותר) — **הובל איתו באופן ספציפי**: נקוב בשמו עם הפרט הקונקרטי (תאריך, מיקום, מחיר) והצג את הכרטיס שלו עם [PRODUCTS: id] של אותו פריט בודד.\n"
+                . "• חשוב מאוד לגבי הניסוח: אתה **מציג** את המוצר בלבד ומפנה לעמוד שלו, אתה **לא** מוסיף לסל ולא מבצע הזמנה בעצמך. אל תגיד \"אתפוס לך כרטיס\", \"הוספתי לסל\" או \"הזמנתי עבורך\". במקום זה הזמן את הגולש להשלים בעצמו, למשל: \"הנה ההרצאה, אפשר לתפוס כרטיס דרך הכפתור בכרטיס\", \"להזמנה לחצו 'לצפייה במוצר'\", \"הכל מחכה לך בעמוד המוצר\".\n"
+                . "• העדף המלצה על פריט ספציפי אחד (או שניים) על פני רשימה כללית. רשימה ארוכה רק אם הגולש ביקש במפורש לראות את כל האפשרויות או לעיין בקטגוריה.\n"
+                // Service / B2B inquiries are a conversation, not a catalogue dump.
+                . "• אם השאלה היא בירור על שירות, אפשרות או תהליך (למשל \"אפשר להזמין הרצאות לארגון?\", \"איך זה עובד?\", \"אתם עושים גם X?\") — ענה בחום ובקצרה על האפשרות ועל התהליך, והצע להתחבר או להשאיר פרטים אם רלוונטי. אל תציג קרוסלת מוצרים בתגובה לבירור כזה; הצג כרטיס רק אם הגולש ביקש לראות או להזמין פריט ספציפי.\n"
                 . "• ענה על מחיר, מלאי ווריאציות אך ורק לפי הנתונים שבבלוק המוצרים למעלה. הנתונים האלה גוברים על כל מחיר או מידע שמופיע בתוכן האתר. לעולם אל תמציא מחיר או מצב מלאי, ואל תשלים מספרים מהזיכרון.\n"
                 . "• כשאתה מוסר מחיר — מסור את \"מחיר נוכחי\". אם צוין שהמוצר במבצע, ציין גם את המחיר הרגיל. לעולם אל תציג את המחיר הרגיל כאילו הוא המחיר לתשלום.\n"
                 . "• אם למוצר יש כמה וריאציות (מידה/צבע וכד') — שאל את הגולש איזו מתאימה לו, ורק אז מסור את המחיר והמלאי של הווריאציה הנכונה.\n"
                 . "• אם מוצר אזל מהמלאי — אמור זאת בכנות והצע חלופה מתוך רשימת המוצרים למעלה (מוצרים המסומנים \"מוצר דומה\" נועדו בדיוק לכך).\n"
                 . "• אם יש בלוק משלוחים — ענה על עלויות וזמני משלוח אך ורק לפיו.\n"
-                . sprintf( "• הוסף בסוף התשובה את הסמן [PRODUCTS: id,id] עם עד %d מזהי המוצרים הרלוונטיים שהזכרת, כדי שיוצגו לגולש ככרטיסים. אם לא הזכרת אף מוצר — אל תוסיף את הסמן.", $card_cap );
+                // The core fix for "it dumps products on every question": gate the cards on
+                // intent. Answer first; show the carousel only when products are actually
+                // wanted, otherwise OFFER. Never both an info answer and a carousel at once.
+                . "• מתי להציג כרטיסי מוצר: אך ורק כשהגולש באמת רוצה לראות, לעיין או לקנות מוצרים, או ששאל שאלה ישירה על מוצר/מחיר/קטגוריה, או שביקש התאמה. במקרה כזה כתוב משפט קצר אחד (למשל \"הנה כמה שיכולים להתאים:\") "
+                . sprintf( "ומיד אחריו [PRODUCTS: id,id] עם עד %d מזהים. אל תפרט שמות/מחירים כטקסט, הכרטיסים מציגים את זה.\n", $card_cap )
+                . "• אם זו שאלת מידע או תוכן (על סדנה, הרצאה, נושא, \"מה זה X\", \"ספר לי על Y\") — ענה קודם על השאלה עצמה בטקסט, בלי כרטיסים באותה הודעה. אם יש פריטים קשורים שעשויים לעניין, סיים בהצעה קצרה כמו \"רוצה שאראה לך את הפריטים הקשורים?\" עם [OPTIONS: כן, הראו לי | לא, תודה]. רק אם הגולש יאשר — בהודעה הבאה הוסף [SUGGEST: מילות חיפוש] לפי מה ששאל, והכרטיסים יופיעו.\n"
+                . "• לעולם לא גם תשובת-תוכן וגם כרטיסים באותה הודעה כשלא התבקשו מוצרים. או שעונים, או שמציעים — לא שניהם.\n"
+                // Product questions are e-commerce, not lead-gen. The card + "view product"
+                // link IS the call to action; nudging the visitor to leave contact details
+                // here is wrong and annoying.
+                . "• בשאלות על מוצרים אל תשתמש בסמן [ASK_LEAD] ואל תציע להשאיר פרטים ליצירת קשר. הפעולה הנכונה היא הכרטיסים והמעבר לעמוד המוצר. הצע להשאיר פרטים אך ורק אם הגולש ביקש במפורש הצעת מחיר מותאמת, ייעוץ אישי, או דבר שאין עליו תשובה בחנות.";
+        }
+
+        // Cross-sell / bundle flow — active when the store module is on and the admin
+        // enabled complementary matching. The widget shows a "match me a complementary
+        // product" button and sends that request here; the model runs a short guided
+        // flow and emits [SUGGEST: terms], which the widget resolves to real cards.
+        $bundle_block = '';
+        if ( class_exists( 'Wisply_Woo' ) && Wisply_Woo::get_instance()->is_active()
+            && $this->db->get_setting( 'woo_bundle_enabled', '1' ) === '1' ) {
+            $bundle_block = "\n\nהמלצה על מוצר משלים (Cross-sell) — זרימה של שני שלבים נפרדים בהודעות נפרדות:\n"
+                . "• כשהלקוח מבקש שתתאים או תמליץ על מוצר משלים (\"מוצר משלים\", \"שילך עם\", \"להשלים את הלוק\", \"סט\") — נהל שיחה קצרה וחכמה, אל תזרוק המלצה יבשה.\n"
+                . "• שלב א׳ (הודעה זו): שאל שאלה אחת ממוקדת כדי להבין את הצורך (למשל: למי זה מיועד? לאיזה אירוע? איזה סגנון אוהבים?), עם הסמן [OPTIONS: אפשרות | אפשרות | אפשרות] ותשובות אמיתיות. **בשלב הזה אסור להוסיף את הסמן [SUGGEST] ואסור להציג מוצרים בכלל** — רק השאלה.\n"
+                . "• שלב ב׳ (הודעה נפרדת, רק אחרי שהלקוח ענה על השאלה): המלץ על פריט משלים **מקטגוריה אחרת** מזו שכבר הוצגה (לטבעת מתאימים עגילים או שרשרת; לשרשרת מתאימים עגילים או צמיד). כתוב משפט אישי קצר ומנומק, ומיד אחריו הוסף את הסמן [SUGGEST: מילות חיפוש בעברית] עם 2 עד 4 מילים (סוג + חומר/סגנון, למשל [SUGGEST: עגילי זהב עדינים]). הכרטיסים יוצגו אוטומטית — אל תפרט אותם כטקסט.\n"
+                . "• חוקים: לעולם אל תשלב [OPTIONS] ו-[SUGGEST] באותה הודעה. אל תשתמש ב-[SUGGEST] לפני שהלקוח ענה לשאלת ההכוונה. אל תמליץ על אותה קטגוריה שכבר הוצגה, ואל תשתמש ב-[ASK_LEAD] בזרימה הזו.";
+        }
+
+        // Order-status flow — active when the store module is on and the admin enabled it.
+        // The model just recognises the intent and emits [ORDER_FORM]; the widget then
+        // collects order number + email and looks up the status securely server-side.
+        $order_block = '';
+        if ( class_exists( 'Wisply_Woo' ) && Wisply_Woo::get_instance()->is_active()
+            && $this->db->get_setting( 'woo_order_status_enabled', '1' ) === '1' ) {
+            $order_block = "\n\nבדיקת סטטוס הזמנה:\n"
+                . "• אם הלקוח שואל על הזמנה קיימת שלו (\"איפה ההזמנה שלי\", \"מה הסטטוס\", \"מתי יגיע המשלוח\", \"מספר מעקב\", \"בוצע חיוב?\") — הוסף בסוף התשובה את הסמן [ORDER_FORM]. הגולש יקבל טופס קצר להזנת מספר הזמנה + המייל שאיתו הזמין, והמערכת תבדוק ותציג את הסטטוס בעצמה.\n"
+                . "• כתוב משפט קצר ומזמין (למשל: אשמח לבדוק, רק צריך את מספר ההזמנה והמייל שאיתו הוזמנה) והוסף את הסמן. חשוב: אל תבקש את הפרטים כטקסט חופשי, אל תבדוק בעצמך, ולעולם אל תמציא סטטוס, תאריך או מספר מעקב.";
+        }
+
+        // Per-site owner rules (empty by default). Authoritative business knowledge,
+        // tone, and product-matching logic the owner typed in settings — injected high
+        // in the prompt so the bot acts by them. Stored per install, never in code.
+        $custom_rules = trim( (string) $this->db->get_setting( 'ai_custom_rules', '' ) );
+        $custom_block = $custom_rules !== ''
+            ? "\n\n=== חוקים והנחיות של בעל העסק (חשוב מאוד — פעל לפיהם תמיד) ===\n$custom_rules\n"
+            : '';
+
+        // Smart product matching by what the customer DESCRIBES (emotion / occasion /
+        // recipient / budget) rather than a product name. Generic — works for any store,
+        // and leans on the owner rules above + the live category vocabulary. Gated on the
+        // store module being on; otherwise these markers would resolve to nothing.
+        $catalog_block = '';
+        $match_block   = '';
+        if ( class_exists( 'Wisply_Woo' ) && Wisply_Woo::get_instance()->is_active() ) {
+            $cats = Wisply_Woo::get_instance()->category_names();
+            if ( ! empty( $cats ) ) {
+                $catalog_block = "\n\nקטגוריות המוצרים בחנות (אוצר המילים שלך להתאמה): " . implode( ', ', array_slice( $cats, 0, 40 ) ) . ".";
+            }
+            $match_block = "\n\nהתאמת מוצר חכמה לפי מה שהלקוח מתאר:\n"
+                . "• כשהלקוח מתאר תחושה, אירוע, מצב, נמען או צורך בלי לנקוב בשם מוצר או קטגוריה (\"מחפשת מתנה ליום נישואין\", \"משהו שישמח אותי\", \"מתנה לאמא\", \"אני מרגישה חגיגית\", \"תקציב קטן\") — אל תשלוף מוצרים אקראית. הבן מה באמת מתאים לפי החוקים של בעל העסק והקטגוריות הקיימות.\n"
+                . "• כתוב משפט אישי חם שמסביר בקצרה למה זה מתאים למה שתיאר, ומיד אחריו הוסף [SUGGEST: מילות חיפוש בעברית] עם סוג הפריט או הקטגוריה המתאימה (למשל [SUGGEST: שרשראות זהב אלגנטיות]). הכרטיסים יוצגו אוטומטית — אל תפרט אותם כטקסט.\n"
+                . "• אם חסר פרט קריטי להתאמה (תקציב, למי המתנה, סגנון) — שאל שאלה קצרה אחת עם [OPTIONS: ...] לפני ההצעה. אחרת הצע ישר.\n"
+                . "• אם בעל העסק לא הגדיר חוקי התאמה — התאם לפי היגיון קמעונאי בריא (אירוע חגיגי -> פריט אלגנטי; לשמח -> פריט צבעוני; קלאסי -> פריט עדין ובטוח).\n"
+                // The reported bug: a purchasable lecture was answered from site content, and
+                // when the visitor said "I want to order tickets" the message no longer named
+                // the item, so the store search found nothing and the bot fell to "no info +
+                // leave details". [SUGGEST:] re-surfaces the item's card (with its buy link)
+                // from the conversation topic, so purchase intent always lands on the product.
+                . "• רכישה / הזמנה / הרשמה / כרטיסים: אם הגולש רוצה לקנות, להזמין, להירשם או לקבל כרטיסים לפריט שנמכר בחנות (מוצר, הרצאה, סדנה, קורס) — גם אם ענית עליו קודם מתוך תוכן האתר — אל תאמר \"אין לי מידע\" ואל תבקש להשאיר פרטים. הצג את כרטיס הפריט עם [SUGGEST: מילות חיפוש של אותו פריט] (למשל אם דיברתם על ההרצאה \"איך לשחק עם הקלפים\" השתמש ב-[SUGGEST: איך לשחק עם הקלפים]). בכרטיס יש כפתור \"לצפייה במוצר\" שדרכו הגולש משלים את ההזמנה בעצמו. רק אם באמת אין פריט תואם בחנות — הצע ליצור קשר או להשאיר פרטים.\n"
+                . "• זכור: הרצאות, סדנאות וקורסים יכולים להיות מוצרים בחנות בדיוק כמו כל מוצר. כשמתעניינים להירשם או להזמין אחד מהם, נסה תמיד קודם להציג את הכרטיס שלו עם [SUGGEST:].";
         }
 
         $lang_instruction = match ( $lang ) {
             'en' => 'Always reply in English only, regardless of the question language.',
             'ru' => 'Всегда отвечай только на русском языке.',
+            'ar' => 'أجب دائمًا باللغة العربية فقط، بغض النظر عن لغة السؤال.',
             default => 'ענה בעברית בלבד.',
         };
 
@@ -313,7 +504,7 @@ class Wisply_AI_Handler {
         // Active only when a 'jobs' (careers) action button is configured.
         $jobs_block = '';
         if ( isset( $actions['jobs'] ) ) {
-            $jobs_block = "\n\nטיפול בפניות דרושים/קריירה (תקף בכל שפה — עברית/אנגלית/רוסית):\n"
+            $jobs_block = "\n\nטיפול בפניות דרושים/קריירה (תקף בכל שפה — עברית/אנגלית/רוסית/ערבית):\n"
                 . "• אם הפונה מחפש עבודה ומציין תפקיד / תחום / משרה ספציפיים שמעניינים אותו "
                 . "(למשל \"אני מחפש עבודה כפיזיותרפיסט\", \"יש משרה לאחות?\", \"I'm a nurse looking for a job\", \"ищу работу медсестрой\") — "
                 . "בצע את שני הדברים **באותה תשובה**: (א) הוסף [ACTION:jobs] כדי להפנות אותו לדף הדרושים; "
@@ -335,7 +526,7 @@ class Wisply_AI_Handler {
 
         return <<<PROMPT
 אתה "$bot", העוזר החכם של $business$type_suffix.
-ענה לגולשים על שאלות הקשורות ל-$business, בהתבסס אך ורק על תוכן האתר שמופיע למטה.$desc_block
+ענה לגולשים על שאלות הקשורות ל-$business, בהתבסס אך ורק על תוכן האתר שמופיע למטה.$desc_block$custom_block
 
 כללי מענה:
 1. ענה לפי "תוכן רלוונטי מהאתר" שמופיע למטה. קרא את כל המקורות בעיון לפני שתאמר שאינך יודע.
@@ -369,6 +560,10 @@ $jobs_block
 $wrapup_block
 $context_block
 $products_block
+$catalog_block
+$match_block
+$bundle_block
+$order_block
 PROMPT;
     }
 
@@ -494,6 +689,7 @@ PROMPT;
             'he' => [ 'אינני יודע', 'לא מצאתי', 'אין לי מידע', 'צור קשר', 'פנה אלינו' ],
             'en' => [ "I don't know", "I couldn't find", 'no information', 'contact us', 'please call' ],
             'ru' => [ 'не знаю', 'не нашел', 'нет информации', 'свяжитесь', 'позвоните' ],
+            'ar' => [ 'لا أعرف', 'لم أجد', 'لا توجد معلومات', 'اتصل بنا', 'تواصل معنا' ],
         ];
         $lower = mb_strtolower( $reply );
         foreach ( ( $markers[ $lang ] ?? [] ) as $marker ) {
@@ -506,6 +702,7 @@ PROMPT;
         return match ( $lang ) {
             'en'    => 'Sorry, I encountered an error. Please try again or contact us by phone.',
             'ru'    => 'Извините, произошла ошибка. Пожалуйста, попробуйте ещё раз или позвоните нам.',
+            'ar'    => 'عذرًا، حدث خطأ. يرجى المحاولة مرة أخرى أو الاتصال بنا هاتفيًا.',
             default => 'מצטערים, אירעה שגיאה. נסה שוב או צור קשר טלפוני.',
         };
     }
@@ -514,6 +711,7 @@ PROMPT;
         $msg = match ( $lang ) {
             'en'    => 'The chatbot is not configured yet. Please contact the site administrator.',
             'ru'    => 'Чат-бот ещё не настроен. Обратитесь к администратору сайта.',
+            'ar'    => 'لم يتم إعداد المحادثة بعد. يرجى التواصل مع مسؤول الموقع.',
             default => 'הצ׳אט טרם הוגדר. אנא פנה למנהל האתר.',
         };
         return [ 'reply' => $msg, 'unanswered' => true ];
@@ -543,7 +741,7 @@ PROMPT;
         if ( $content === '' ) return [];
         $content = mb_substr( $content, 0, 2800 );
 
-        $lang_name = [ 'he' => 'עברית', 'en' => 'English', 'ru' => 'русском языке' ][ $lang ] ?? 'עברית';
+        $lang_name = [ 'he' => 'עברית', 'en' => 'English', 'ru' => 'русском языке', 'ar' => 'اللغة العربية' ][ $lang ] ?? 'עברית';
         $system    = 'אתה יוצר שאלות נפוצות קצרות. החזר אך ורק מערך JSON של 4 מחרוזות (שאלות), ללא שום טקסט נוסף.';
         $user      = "להלן תוכן מתוך עמוד באתר בשם \"$title\". "
             . "צור בדיוק 4 שאלות קצרות וברורות (עד 6 מילים כל אחת) שגולש המתעניין בעמוד הזה עשוי לשאול, ב$lang_name. "
@@ -581,54 +779,28 @@ PROMPT;
         }
         if ( trim( $transcript ) === '' ) return '';
 
-        $lang_name = [ 'he' => 'עברית', 'en' => 'English', 'ru' => 'русском языке' ][ $lang ] ?? 'עברית';
+        $lang_name = [ 'he' => 'עברית', 'en' => 'English', 'ru' => 'русском языке', 'ar' => 'اللغة العربية' ][ $lang ] ?? 'עברית';
         $system    = 'אתה מסכם שיחות שירות בקצרה ובאופן ענייני, ללא פתיח.';
         $user      = "סכם את השיחה הבאה במשפט אחד עד שניים ב$lang_name — מה הפונה רצה ובמה התעניין:\n\n$transcript";
         return trim( $this->raw_completion( $system, $user, 150 ) );
     }
 
-    /** Minimal one-shot completion using the configured provider — for small helper tasks. */
+    /** Minimal one-shot completion through the Wisply proxy — for small helper tasks. */
     private function raw_completion( string $system, string $user, int $max_tokens = 300 ): string {
-        $provider = $this->db->get_setting( 'ai_provider', 'openai' );
+        if ( ! $this->license_key_present() ) return '';
 
-        if ( $provider === 'openai' ) {
-            $api_key = $this->db->get_setting( 'openai_api_key', '' );
-            if ( empty( $api_key ) ) return '';
-            $model = $this->db->get_setting( 'openai_model', 'gpt-4o' );
-            $resp  = wp_remote_post( 'https://api.openai.com/v1/chat/completions', [
-                'timeout' => 20,
-                'headers' => [ 'Authorization' => 'Bearer ' . $api_key, 'Content-Type' => 'application/json' ],
-                'body'    => wp_json_encode( [
-                    'model'       => $model,
-                    'max_tokens'  => $max_tokens,
-                    'temperature' => 0.4,
-                    'messages'    => [
-                        [ 'role' => 'system', 'content' => $system ],
-                        [ 'role' => 'user',   'content' => $user ],
-                    ],
-                ] ),
-            ] );
-            if ( is_wp_error( $resp ) ) return '';
-            $b = json_decode( wp_remote_retrieve_body( $resp ), true );
-            return (string) ( $b['choices'][0]['message']['content'] ?? '' );
-        }
-
-        $api_key = $this->db->get_setting( 'ai_api_key', '' );
-        if ( empty( $api_key ) ) return '';
-        $model = $this->db->get_setting( 'ai_model', 'claude-sonnet-4-6' );
-        $resp  = wp_remote_post( 'https://api.anthropic.com/v1/messages', [
-            'timeout' => 20,
-            'headers' => [ 'x-api-key' => $api_key, 'anthropic-version' => '2023-06-01', 'content-type' => 'application/json' ],
-            'body'    => wp_json_encode( [
-                'model'      => $model,
-                'max_tokens' => $max_tokens,
-                'system'     => $system,
-                'messages'   => [ [ 'role' => 'user', 'content' => $user ] ],
-            ] ),
-        ] );
-        if ( is_wp_error( $resp ) ) return '';
-        $b = json_decode( wp_remote_retrieve_body( $resp ), true );
-        return (string) ( $b['content'][0]['text'] ?? '' );
+        // Helper tasks (page questions, lead summaries) always run on the
+        // economical model — quality there doesn't justify gpt-4o pricing.
+        $b = $this->proxy_request( 'chat', [
+            'model'       => 'gpt-4o-mini',
+            'max_tokens'  => $max_tokens,
+            'temperature' => 0.4,
+            'messages'    => [
+                [ 'role' => 'system', 'content' => $system ],
+                [ 'role' => 'user',   'content' => $user ],
+            ],
+        ], 25 );
+        return (string) ( $b['choices'][0]['message']['content'] ?? '' );
     }
 
     // ─── Voice: Realtime (speech-to-speech) session + grounded lookup ──────────
@@ -641,9 +813,8 @@ PROMPT;
      * @return array{success:bool, client_secret?:string, expires_at?:mixed, model?:string, voice?:string, error?:string}
      */
     public function create_realtime_session( string $lang ): array {
-        $api_key = $this->db->get_setting( 'openai_api_key', '' );
-        if ( empty( $api_key ) ) {
-            return [ 'success' => false, 'error' => 'OpenAI API key not configured' ];
+        if ( ! $this->license_key_present() ) {
+            return [ 'success' => false, 'error' => 'Wisply licence key not configured' ];
         }
         $lang  = in_array( $lang, self::SUPPORTED_LANGS, true ) ? $lang : 'he';
         $model = (string) $this->db->get_setting( 'realtime_model', 'gpt-realtime' );
@@ -674,20 +845,7 @@ PROMPT;
             'tool_choice'  => 'auto',
         ];
 
-        $response = wp_remote_post( 'https://api.openai.com/v1/realtime/client_secrets', [
-            'timeout' => 20,
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type'  => 'application/json',
-            ],
-            'body'    => wp_json_encode( [ 'session' => $session ] ),
-        ] );
-
-        if ( is_wp_error( $response ) ) {
-            return [ 'success' => false, 'error' => $response->get_error_message() ];
-        }
-
-        $body  = json_decode( wp_remote_retrieve_body( $response ), true );
+        $body  = $this->proxy_request( 'realtime', [ 'session' => $session ], 25 );
         $value = $body['value'] ?? ( $body['client_secret']['value'] ?? null );
         if ( $value ) {
             return [
@@ -699,7 +857,7 @@ PROMPT;
             ];
         }
 
-        $err = $body['error']['message'] ?? ( 'HTTP ' . wp_remote_retrieve_response_code( $response ) );
+        $err = $body['error']['message'] ?? 'שירות הקול אינו זמין כרגע';
         return [ 'success' => false, 'error' => $err ];
     }
 
@@ -734,6 +892,7 @@ PROMPT;
         $lang_line = match ( $lang ) {
             'en' => 'Speak and reply in English.',
             'ru' => 'Говори и отвечай только по-русски.',
+            'ar' => 'تحدث وأجب باللغة العربية فقط.',
             default => 'דבר וענה בעברית בלבד.',
         };
         $p          = $this->persona();
@@ -815,62 +974,23 @@ PROMPT;
      * @return array{success:bool, text?:string, error?:string}
      */
     public function transcribe_audio( string $audio_binary, string $mime, string $lang ): array {
-        $api_key = $this->db->get_setting( 'openai_api_key', '' );
-        if ( empty( $api_key ) ) {
-            return [ 'success' => false, 'error' => 'OpenAI API key not configured' ];
+        if ( ! $this->license_key_present() ) {
+            return [ 'success' => false, 'error' => 'Wisply licence key not configured' ];
         }
         if ( empty( $audio_binary ) ) {
             return [ 'success' => false, 'error' => 'Empty audio' ];
         }
 
-        $model = $this->db->get_setting( 'stt_model', 'whisper-1' );
-        $lang  = in_array( $lang, self::SUPPORTED_LANGS, true ) ? $lang : 'he';
+        $lang = in_array( $lang, self::SUPPORTED_LANGS, true ) ? $lang : 'he';
 
-        // Map the browser's MIME to a filename extension Whisper accepts
-        $ext = match ( true ) {
-            str_contains( $mime, 'webm' ) => 'webm',
-            str_contains( $mime, 'mp4' ), str_contains( $mime, 'm4a' ), str_contains( $mime, 'aac' ) => 'm4a',
-            str_contains( $mime, 'ogg' ), str_contains( $mime, 'opus' ) => 'ogg',
-            str_contains( $mime, 'wav' ) => 'wav',
-            str_contains( $mime, 'mpeg' ), str_contains( $mime, 'mp3' ) => 'mp3',
-            default => 'webm',
-        };
+        // The proxy rebuilds the multipart upload server-side from base64.
+        $decoded = $this->proxy_request( 'transcribe', [
+            'audio' => base64_encode( $audio_binary ),
+            'mime'  => $mime,
+            'lang'  => $lang,
+            'model' => $this->db->get_setting( 'stt_model', 'whisper-1' ),
+        ], 45 );
 
-        // Build a multipart/form-data body by hand (wp_remote_post has no file helper)
-        $boundary = 'wisply' . bin2hex( random_bytes( 12 ) );
-        $eol      = "\r\n";
-        $body     = '';
-
-        $body .= "--$boundary$eol";
-        $body .= "Content-Disposition: form-data; name=\"model\"$eol$eol$model$eol";
-
-        $body .= "--$boundary$eol";
-        $body .= "Content-Disposition: form-data; name=\"language\"$eol$eol$lang$eol";
-
-        $body .= "--$boundary$eol";
-        $body .= "Content-Disposition: form-data; name=\"response_format\"{$eol}{$eol}json{$eol}";
-
-        $body .= "--$boundary$eol";
-        $body .= "Content-Disposition: form-data; name=\"file\"; filename=\"speech.$ext\"$eol";
-        $body .= "Content-Type: " . ( $mime ?: 'application/octet-stream' ) . "$eol$eol";
-        $body .= $audio_binary . $eol;
-
-        $body .= "--$boundary--$eol";
-
-        $response = wp_remote_post( 'https://api.openai.com/v1/audio/transcriptions', [
-            'timeout' => 40,
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type'  => 'multipart/form-data; boundary=' . $boundary,
-            ],
-            'body'    => $body,
-        ] );
-
-        if ( is_wp_error( $response ) ) {
-            return [ 'success' => false, 'error' => $response->get_error_message() ];
-        }
-
-        $decoded = json_decode( wp_remote_retrieve_body( $response ), true );
         if ( isset( $decoded['text'] ) ) {
             return [ 'success' => true, 'text' => trim( $decoded['text'] ) ];
         }
@@ -889,9 +1009,8 @@ PROMPT;
      * @return array{success:bool, audio?:string, mime?:string, error?:string}  audio = base64 mp3
      */
     public function synthesize_speech( string $text, string $lang, string $voice_override = '' ): array {
-        $api_key = $this->db->get_setting( 'openai_api_key', '' );
-        if ( empty( $api_key ) ) {
-            return [ 'success' => false, 'error' => 'OpenAI API key not configured' ];
+        if ( ! $this->license_key_present() ) {
+            return [ 'success' => false, 'error' => 'Wisply licence key not configured' ];
         }
 
         // Strip markdown / control markers so they aren't read aloud, and cap length
@@ -906,37 +1025,17 @@ PROMPT;
             $text = mb_substr( $text, 0, 1200 );
         }
 
-        $model = $this->db->get_setting( 'tts_model', 'gpt-4o-mini-tts' );
-        $voice = $voice_override !== '' ? $voice_override : $this->db->get_setting( 'tts_voice', 'shimmer' );
+        $decoded = $this->proxy_request( 'speak', [
+            'text'  => $text,
+            'model' => $this->db->get_setting( 'tts_model', 'gpt-4o-mini-tts' ),
+            'voice' => $voice_override !== '' ? $voice_override : $this->db->get_setting( 'tts_voice', 'shimmer' ),
+        ], 45 );
 
-        $response = wp_remote_post( 'https://api.openai.com/v1/audio/speech', [
-            'timeout' => 40,
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type'  => 'application/json',
-            ],
-            'body'    => wp_json_encode( [
-                'model'           => $model,
-                'voice'           => $voice,
-                'input'           => $text,
-                'response_format' => 'mp3',
-            ] ),
-        ] );
-
-        if ( is_wp_error( $response ) ) {
-            return [ 'success' => false, 'error' => $response->get_error_message() ];
+        if ( isset( $decoded['audio'] ) && $decoded['audio'] !== '' ) {
+            return [ 'success' => true, 'audio' => (string) $decoded['audio'], 'mime' => (string) ( $decoded['mime'] ?? 'audio/mpeg' ) ];
         }
 
-        $code = wp_remote_retrieve_response_code( $response );
-        $raw  = wp_remote_retrieve_body( $response );
-
-        // On success OpenAI returns binary audio; on error it returns JSON
-        if ( $code === 200 && $raw !== '' && $raw[0] !== '{' ) {
-            return [ 'success' => true, 'audio' => base64_encode( $raw ), 'mime' => 'audio/mpeg' ];
-        }
-
-        $decoded = json_decode( $raw, true );
-        $err     = $decoded['error']['message'] ?? 'Speech synthesis failed';
+        $err = $decoded['error']['message'] ?? 'Speech synthesis failed';
         return [ 'success' => false, 'error' => $err ];
     }
 
