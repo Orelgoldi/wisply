@@ -242,6 +242,16 @@ class Wisply_Database {
             'woo_visual_search'  => '0',
             'woo_bundle_enabled' => '1',   // offer a complementary-product match after showing cards
             'woo_order_status_enabled' => '1',   // let customers check order status by order # + email
+            // WhatsApp channel (Meta WhatsApp Cloud API) — the bot answers on WhatsApp too
+            'wa_enabled'          => '0',
+            'wa_phone_number_id'  => '',
+            'wa_access_token'     => '',
+            'wa_verify_token'     => '',
+            'wa_app_secret'       => '',
+            // Human handoff — hand the chat to an employee's WhatsApp on request
+            'handoff_enabled'     => '0',
+            'handoff_wa_number'   => '',        // employee WhatsApp, international digits (e.g. 972501234567)
+            'handoff_label'       => '',        // button label (blank → default)
             // Lead form fields, end-of-conversation CTA and message limit
             'lead_field_name'    => 'required',   // required | optional | hidden
             'lead_field_phone'   => 'required',   // required | optional | hidden
@@ -581,6 +591,37 @@ class Wisply_Database {
             ),
             ARRAY_A
         );
+    }
+
+    /** Latest conversation id for a session (read-only, any day). 0 when none. */
+    public function find_conversation( string $session_id ): int {
+        $conv = $this->db->prefix . self::TABLE_CONVERSATIONS;
+        return (int) $this->db->get_var( $this->db->prepare(
+            "SELECT id FROM $conv WHERE session_id = %s ORDER BY id DESC LIMIT 1", $session_id
+        ) );
+    }
+
+    /**
+     * Messages of a conversation with id greater than $after_id (ascending). Powers the
+     * live-agent polling: the widget asks "anything new since message X?". Optionally
+     * filtered by role (e.g. only 'agent' messages).
+     *
+     * @return array<int,array{id:string,role:string,content:string}>
+     */
+    public function get_messages_after( int $conversation_id, int $after_id, array $roles = [] ): array {
+        $msg = $this->db->prefix . self::TABLE_MESSAGES;
+        if ( ! empty( $roles ) ) {
+            $ph   = implode( ',', array_fill( 0, count( $roles ), '%s' ) );
+            $args = array_merge( [ $conversation_id, $after_id ], $roles );
+            return (array) $this->db->get_results( $this->db->prepare(
+                "SELECT id, role, content FROM $msg WHERE conversation_id = %d AND id > %d AND role IN ($ph) ORDER BY id ASC LIMIT 50",
+                $args
+            ), ARRAY_A );
+        }
+        return (array) $this->db->get_results( $this->db->prepare(
+            "SELECT id, role, content FROM $msg WHERE conversation_id = %d AND id > %d ORDER BY id ASC LIMIT 50",
+            $conversation_id, $after_id
+        ), ARRAY_A );
     }
 
     /** All messages of a conversation in chronological order (for admin view). */

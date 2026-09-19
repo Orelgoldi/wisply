@@ -47,6 +47,23 @@ class Wisply_License {
     private const TRANSIENT_CHECK  = 'wisply_license_checked';
     private const TRANSIENT_UPDATE = 'wisply_update_info';
 
+    /**
+     * Master / demo keys. Entering one of these activates the plugin INSTANTLY and
+     * OFFLINE — full access, all languages, no call to the licence server. For live
+     * demos and internal use, so the bot never depends on wisply.io being reachable.
+     * Compared case-insensitively (get_key() upper-cases the input).
+     */
+    private const MASTER_KEYS = [
+        'WISPLY-MASTER-2026',
+        'WSP-DEMO-FULL-ACCESS',
+        'WISPLY-DEMO-GOLDSTEIN',
+    ];
+
+    /** True when the stored key is one of the offline master/demo keys. */
+    private function is_master(): bool {
+        return in_array( $this->get_key(), self::MASTER_KEYS, true );
+    }
+
     private function __construct() {
         $this->db = Wisply_Database::get_instance();
 
@@ -196,6 +213,12 @@ class Wisply_License {
             $this->store_status( 'unknown', 'לא הוזן מפתח רישיון.' );
             return [ 'ok' => false, 'status' => 'unknown', 'message' => 'לא הוזן מפתח רישיון.' ];
         }
+        // Master / demo key: activate offline, full access, no server round-trip.
+        if ( in_array( $key, self::MASTER_KEYS, true ) ) {
+            $this->db->set_setting( 'license_max_langs', '4' );
+            $this->store_status( 'active', 'רישיון דמו/מאסטר פעיל (ללא שרת).' );
+            return [ 'ok' => true, 'status' => 'active', 'message' => 'רישיון דמו/מאסטר פעיל.' ];
+        }
         delete_transient( self::TRANSIENT_UPDATE );
         set_transient( self::TRANSIENT_CHECK, 1, self::CHECK_EVERY );
         return $this->apply( $this->post( '/api/license/activate', $key ) );
@@ -220,6 +243,13 @@ class Wisply_License {
     public function check(): void {
         $key = $this->get_key();
         if ( $key === '' ) return;
+
+        // Master / demo key never phones home — keep it active, all languages.
+        if ( $this->is_master() ) {
+            $this->db->set_setting( 'license_max_langs', '4' );
+            $this->store_status( 'active', 'רישיון דמו/מאסטר פעיל (ללא שרת).' );
+            return;
+        }
 
         $res = $this->post( '/api/license/check', $key );
 
@@ -262,6 +292,8 @@ class Wisply_License {
      * phone home again and could never re-gate itself.
      */
     public function is_valid(): bool {
+        if ( $this->is_master() ) return true;   // offline demo/master key
+
         if ( $this->get_key() === '' ) {
             return (string) $this->db->get_setting( 'license_ever_active', '0' ) !== '1';
         }
@@ -296,6 +328,7 @@ class Wisply_License {
      * confirmed. Once confirmed the value is sticky (see apply()).
      */
     public function max_langs(): int {
+        if ( $this->is_master() ) return 4;      // demo/master → all languages
         $stored = (int) $this->db->get_setting( 'license_max_langs', 0 );
         return $stored > 0 ? $stored : 1;
     }

@@ -144,6 +144,18 @@ class Wisply_Chatbot_API {
             ],
         ] );
 
+        // Public: live-agent poll — the widget asks for new agent/system messages since a
+        // given id while a human handoff is active, and whether it is still active.
+        register_rest_route( $ns, '/agent-poll', [
+            'methods'             => 'GET',
+            'callback'            => [ $this, 'handle_agent_poll' ],
+            'permission_callback' => [ $this, 'poll_permission' ],
+            'args'                => [
+                'session_id' => [ 'required' => true,  'type' => 'string',  'sanitize_callback' => 'sanitize_text_field' ],
+                'after'      => [ 'required' => false, 'type' => 'integer', 'default' => 0 ],
+            ],
+        ] );
+
         // Public: visual product search — image in, matching products out
         register_rest_route( $ns, '/product-image-search', [
             'methods'             => 'POST',
@@ -207,6 +219,21 @@ class Wisply_Chatbot_API {
      * their key. Wisply_License::is_valid() fails open on anything short of an
      * explicit rejection, so this cannot fire because our server had a bad day.
      */
+    /**
+     * Lighter gate for the live-agent poll: it fires every few seconds while a handoff is
+     * open, so it must NOT burn the per-IP request budget (rate_limit_check). Licence and
+     * origin are still enforced.
+     */
+    public function poll_permission( WP_REST_Request $request ): bool|WP_Error {
+        if ( class_exists( 'Wisply_License' ) && ! Wisply_License::get_instance()->is_valid() ) {
+            return new WP_Error( 'license_inactive', 'הרישיון של הבוט אינו פעיל.', [ 'status' => 403 ] );
+        }
+        if ( ! $this->origin_allowed() ) {
+            return new WP_Error( 'forbidden_origin', 'Forbidden', [ 'status' => 403 ] );
+        }
+        return true;
+    }
+
     public function rate_limit_check( WP_REST_Request $request ): bool|WP_Error {
         if ( class_exists( 'Wisply_License' ) && ! Wisply_License::get_instance()->is_valid() ) {
             return new WP_Error(
@@ -249,6 +276,24 @@ class Wisply_Chatbot_API {
 
         // Get or create the session's conversation
         $conv_id = $this->db->get_or_create_conversation( $session_id, $lang, $ip_hash, $page_url );
+
+        // ── Live-agent handoff: while this session is in human mode, the visitor talks to
+        // a real agent (on WhatsApp), NOT the bot. Relay the message to the agent and skip
+        // the AI entirely. The widget shows the agent's replies via /agent-poll.
+        if ( class_exists( 'Wisply_WhatsApp' ) ) {
+            $ho = Wisply_WhatsApp::get_instance()->handoff_state( $session_id );
+            if ( is_array( $ho ) && ! empty( $ho['agent'] ) ) {
+                $this->db->add_message( $conv_id, 'user', $message );
+                Wisply_WhatsApp::get_instance()->notify( $ho['agent'], '👤 ' . mb_substr( $message, 0, 3000 ) );
+                return new WP_REST_Response( [
+                    'reply'              => '',
+                    'human'              => true,
+                    'unanswered'         => false,
+                    'sources'            => [],
+                    'conversation_ended' => false,
+                ], 200 );
+            }
+        }
 
         // ── Free-trial gate (Wisply product monetization) ──
         // Inert unless a trial has actually been started by the setup wizard (status
@@ -313,6 +358,18 @@ class Wisply_Chatbot_API {
         // visitor is viewing (so it can answer the questions shown on that page).
         $result = $this->ai->get_reply( $message, $lang, $history, $turn, (string) $page_url );
 
+        // Human handoff: the bot flags [HANDOFF] (or the visitor clearly asked for a
+        // person). When an agent number is set, hand them a click-to-WhatsApp link that
+        // opens the agent's WhatsApp pre-filled with a short summary of what they wanted.
+        $handoff = $this->build_handoff( (string) $result['reply'], $message, $conv_id, $session_id );
+        $result['reply'] = $handoff['reply'];   // [HANDOFF] stripped
+        // When the two-way bridge starts, the bot steps aside — use its short note if the
+        // model didn't already write a hand-off sentence.
+        if ( $handoff['bridge'] && trim( (string) $result['reply'] ) === '' ) {
+            $result['reply'] = $handoff['note'];
+            $result['unanswered'] = false;
+        }
+
         // Store assistant message, flag unanswered if needed
         $this->db->add_message( $conv_id, 'assistant', $result['reply'], $result['unanswered'] );
 
@@ -322,8 +379,101 @@ class Wisply_Chatbot_API {
             'sources'            => $result['sources'] ?? [],
             'product_ids'        => $result['product_ids'] ?? [],
             'show_products'      => $result['show_products'] ?? false,
+            'handoff_url'        => $handoff['url'],
+            'handoff_label'      => $handoff['label'],
+            'human'              => $handoff['bridge'],
             'conversation_ended' => false,
         ], 200 );
+    }
+
+    /**
+     * Decide whether to offer a WhatsApp handoff to a human agent, and build the
+     * click-to-WhatsApp URL (pre-filled with a short chat summary). Returns the reply
+     * with the [HANDOFF] marker stripped plus url/label ('' when not offered).
+     *
+     * @return array{reply:string,url:string,label:string}
+     */
+    private function build_handoff( string $reply, string $message, int $conv_id, string $session_id ): array {
+        $marked = (bool) preg_match( '/\[HANDOFF\]/i', $reply );
+        $reply  = trim( (string) preg_replace( '/\[HANDOFF\]/i', '', $reply ) );
+
+        $out = [ 'reply' => $reply, 'url' => '', 'label' => '', 'bridge' => false, 'note' => '' ];
+
+        if ( $this->db->get_setting( 'handoff_enabled', '0' ) !== '1' ) return $out;
+
+        $asked = $marked || (bool) preg_match(
+            '/נציג|נציגה|בן ?אדם|בנאדם|אדם אמיתי|מישהו אמיתי|אנושי|לדבר עם מישהו|human|representative|real person|live agent/iu',
+            $message
+        );
+        if ( ! $asked ) return $out;
+
+        $num = preg_replace( '/\D/', '', (string) $this->db->get_setting( 'handoff_wa_number', '' ) );
+        if ( $num === '' ) return $out;
+
+        // Two-way bridge when the WhatsApp Cloud API is configured: notify the agent and
+        // put this website conversation into human mode. The visitor keeps chatting on the
+        // site; the agent answers from WhatsApp. Falls back to a click-to-WhatsApp button
+        // when the API isn't set up.
+        $wa_ready = class_exists( 'Wisply_WhatsApp' )
+            && $this->db->get_setting( 'wa_enabled', '0' ) === '1'
+            && (string) $this->db->get_setting( 'wa_phone_number_id', '' ) !== ''
+            && (string) $this->db->get_setting( 'wa_access_token', '' ) !== '';
+
+        if ( $wa_ready ) {
+            $wa = Wisply_WhatsApp::get_instance();
+            $wa->start_handoff( $session_id, $conv_id, $num );
+            $wa->notify( $num, $this->handoff_summary( $conv_id ) . "\n\n↩️ השב/י כאן וההודעה תופיע ללקוח באתר. לסיום כתוב/י \"סיום\"." );
+            $out['bridge'] = true;
+            $out['note']   = 'מעביר אותך לנציג/ה שלנו, הוא/היא יחזרו אליך כאן בעוד רגע.';
+            return $out;
+        }
+
+        $out['url']   = 'https://wa.me/' . $num . '?text=' . rawurlencode( $this->handoff_summary( $conv_id ) );
+        $label        = trim( (string) $this->db->get_setting( 'handoff_label', '' ) );
+        $out['label'] = $label !== '' ? $label : 'המשך עם נציג בוואטסאפ';
+        return $out;
+    }
+
+    /** Short WhatsApp opener with the visitor's last few questions, for the agent's context. */
+    private function handoff_summary( int $conv_id ): string {
+        $site  = wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES );
+        $lines = [ "היי, הגעתי מהצ׳אט של {$site} ואשמח לדבר עם נציג/ה." ];
+
+        $qs = [];
+        foreach ( (array) $this->db->get_conversation_messages( $conv_id, 12 ) as $m ) {
+            if ( ( $m['role'] ?? '' ) === 'user' ) {
+                $t = trim( (string) ( $m['content'] ?? '' ) );
+                if ( $t !== '' ) $qs[] = $t;
+            }
+        }
+        $qs = array_slice( array_values( array_unique( $qs ) ), -3 );
+        if ( $qs ) {
+            $lines[] = '';
+            $lines[] = 'מה שכתבתי בצ׳אט:';
+            foreach ( $qs as $q ) $lines[] = '• ' . mb_substr( $q, 0, 200 );
+        }
+        return implode( "\n", $lines );
+    }
+
+    /** Live-agent poll: new agent/system messages since $after, and whether still human. */
+    public function handle_agent_poll( WP_REST_Request $request ): WP_REST_Response {
+        $session = (string) $request->get_param( 'session_id' );
+        $after   = (int) $request->get_param( 'after' );
+        if ( $session === '' ) {
+            return new WP_REST_Response( [ 'messages' => [], 'human' => false ], 200 );
+        }
+
+        $human = class_exists( 'Wisply_WhatsApp' )
+            && Wisply_WhatsApp::get_instance()->handoff_state( $session ) !== null;
+
+        $out     = [];
+        $conv_id = $this->db->find_conversation( $session );
+        if ( $conv_id > 0 ) {
+            foreach ( $this->db->get_messages_after( $conv_id, $after, [ 'agent', 'system' ] ) as $m ) {
+                $out[] = [ 'id' => (int) $m['id'], 'role' => (string) $m['role'], 'content' => (string) $m['content'] ];
+            }
+        }
+        return new WP_REST_Response( [ 'messages' => $out, 'human' => $human ], 200 );
     }
 
     /** True when at least one contact field is visible, so we can demand one of them. */

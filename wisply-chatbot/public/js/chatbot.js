@@ -635,7 +635,7 @@
       const d = await res.json();
 
       // Parse interactive markers from the reply
-      let reply = d.reply;
+      let reply = d.reply || '';
       const actionMatch = reply.match(/\[ACTION:([a-z_]+)\]/i);
       const optsMatch   = reply.match(/\[OPTIONS:([^\]]+)\]/i);
       const prodMatch   = reply.match(/\[PRODUCTS:([^\]]+)\]/i);
@@ -659,7 +659,7 @@
       // Message limit reached (F3) — the server closes the conversation on this reply
       const ended = !!d.conversation_ended;
 
-      botMsg(cleanReply);
+      if (cleanReply) botMsg(cleanReply);   // empty during a human-mode relay
       // Product cards: the model's explicit [PRODUCTS:] selection wins; otherwise the
       // server's product_ids, but ONLY when it flagged show_products (a real shopping
       // intent — browse / price / category / buy / order). Plain info answers set
@@ -674,6 +674,10 @@
       // results back so we never show products before the customer answered.
       if (suggestMatch && !optsMatch) productSuggest(suggestMatch[1].trim());
       if (wantsOrderForm && !ended) orderStatusForm();
+      // Human handoff: a click-to-WhatsApp button to the agent, pre-filled with context.
+      if (d.handoff_url) handoffButton(d.handoff_url, d.handoff_label);
+      // Live two-way bridge: agent answers from WhatsApp, visitor stays here.
+      if (d.human) enterHumanMode();
       if (emergency)  emergencyButtons();
       // Follow-up prompts would be dead ends once the conversation is over
       if (!ended) {
@@ -956,6 +960,10 @@
   // which category to complement.
   let lastShownCategory = '';
 
+  // Live-agent handoff (two-way bridge): while active, the visitor talks to a real
+  // agent (on WhatsApp) and the widget polls for the agent's replies.
+  let humanMode = false, agentPollTimer = null, lastAgentId = 0;
+
   const WOO_T = {
     img_search:  'חיפוש מוצר לפי תמונה',
     searching:   'מחפש מוצרים דומים…',
@@ -1152,6 +1160,66 @@
     const color = on ? '#0a7a34' : status === 'onbackorder' ? '#8a5a00' : '#b3261e';
     const bg    = on ? 'rgba(10,122,52,.10)' : status === 'onbackorder' ? 'rgba(138,90,0,.10)' : 'rgba(179,38,30,.10)';
     return `<span style="align-self:flex-start;font-size:10.5px;font-weight:700;color:${color};background:${bg};padding:2px 7px;border-radius:20px">${label}</span>`;
+  }
+
+  /* ─ Human handoff: click-to-WhatsApp button to a live agent ─ */
+  function handoffButton(url, label) {
+    const msgs = $id('m-msgs');
+    if (!msgs || !url) return;
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener';
+    a.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:9px;margin:4px 0 6px;background:#25a35a;color:#fff;font-size:13.5px;font-weight:700;text-decoration:none;padding:12px 16px;border-radius:12px;box-shadow:0 8px 18px -8px rgba(37,163,90,.7)';
+    a.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="#fff"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.9c0 1.76.46 3.47 1.34 4.98L2 22l5.25-1.38a9.9 9.9 0 004.78 1.22h.01c5.46 0 9.9-4.44 9.9-9.9 0-2.65-1.03-5.14-2.9-7.01A9.8 9.8 0 0012.05 2zm5.8 14.16c-.24.68-1.4 1.3-1.94 1.38-.5.07-1.12.1-1.8-.11-.42-.13-.95-.31-1.64-.61-2.88-1.24-4.76-4.14-4.9-4.33-.14-.19-1.17-1.56-1.17-2.98 0-1.42.74-2.12 1.01-2.41.27-.29.58-.36.77-.36l.56.01c.18 0 .42-.07.66.5.24.58.82 2 .89 2.15.07.14.12.31.02.5-.09.19-.14.31-.28.48l-.42.5c-.14.14-.28.29-.12.56.16.27.71 1.17 1.53 1.9 1.05.93 1.94 1.22 2.21 1.36.27.14.43.12.59-.07.16-.19.68-.79.86-1.06.18-.27.36-.22.61-.13.25.09 1.58.74 1.85.88.27.13.45.2.52.31.07.11.07.64-.17 1.32z"/></svg><span>' + esc(label || 'המשך בוואטסאפ') + '</span>';
+    msgs.appendChild(a);
+    scroll(msgs);
+  }
+
+  /* ─ Live-agent bridge: visitor stays here, a real agent answers from WhatsApp ─ */
+  function enterHumanMode() {
+    if (humanMode) return;
+    humanMode = true;
+    systemNote('🟢 מחובר/ת לנציג/ה. מכאן ההודעות שלך מגיעות ישירות אליו/ה.');
+    startAgentPoll();
+  }
+  function exitHumanMode() {
+    if (!humanMode) return;
+    humanMode = false;
+    stopAgentPoll();
+    systemNote('השיחה עם הנציג/ה הסתיימה. אני שוב כאן לכל שאלה.');
+  }
+  function stopAgentPoll() { if (agentPollTimer) { clearInterval(agentPollTimer); agentPollTimer = null; } }
+  function startAgentPoll() {
+    stopAgentPoll();
+    pollAgent();
+    agentPollTimer = setInterval(pollAgent, 4000);
+  }
+  async function pollAgent() {
+    if (!humanMode) { stopAgentPoll(); return; }
+    try {
+      const res = await fetch(CFG.apiUrl + '/agent-poll?session_id=' + encodeURIComponent(sid) + '&after=' + lastAgentId, {
+        headers: { 'X-WP-Nonce': CFG.nonce },
+      });
+      if (!res.ok) return;
+      const d = await res.json();
+      (d.messages || []).forEach(m => {
+        if (m.id > lastAgentId) lastAgentId = m.id;
+        if (m.role === 'agent') agentMsg(m.content);
+        else systemNote(m.content);
+      });
+      if (d.human === false) exitHumanMode();
+    } catch {}
+  }
+  /* A message from the human agent — styled distinctly from the bot. */
+  function agentMsg(text) {
+    const msgs = $id('m-msgs');
+    if (!msgs) return;
+    const el = document.createElement('div');
+    el.className = 'm-msg bot';
+    el.innerHTML = `<div class="m-bub" style="border:1px solid rgba(37,163,90,.4)">${fmt(text)}</div>
+      <div class="m-ts"><span style="color:#25a35a;font-weight:700">● נציג/ה</span> · ${clock()}</div>`;
+    msgs.appendChild(el);
+    scroll(msgs);
+    speak(text);
   }
 
   /* ─ Order status: order # + email → secure status lookup ─ */

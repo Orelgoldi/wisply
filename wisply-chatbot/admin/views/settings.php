@@ -36,6 +36,8 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'report_recipients', 'report_daily', 'report_weekly',
             'woo_enabled', 'woo_max_products', 'woo_show_stock', 'woo_visual_search', 'woo_bundle_enabled', 'woo_order_status_enabled',
+            'wa_enabled', 'wa_phone_number_id', 'wa_access_token', 'wa_verify_token', 'wa_app_secret',
+            'handoff_enabled', 'handoff_wa_number', 'handoff_label',
             'lead_field_name', 'lead_field_phone', 'lead_field_email',
             'conversation_end_action', 'max_messages', 'wrapup_margin',
         ];
@@ -59,7 +61,9 @@ if ( isset( $_POST['wisply_settings_nonce'] ) ) {
         $_POST['woo_visual_search']  = isset( $_POST['woo_visual_search'] )  ? '1' : '0';
         $_POST['woo_bundle_enabled'] = isset( $_POST['woo_bundle_enabled'] ) ? '1' : '0';
         $_POST['woo_order_status_enabled'] = isset( $_POST['woo_order_status_enabled'] ) ? '1' : '0';
-        $secret_keys = [ 'ai_api_key', 'openai_api_key' ];
+        $_POST['wa_enabled'] = isset( $_POST['wa_enabled'] ) ? '1' : '0';
+        $_POST['handoff_enabled'] = isset( $_POST['handoff_enabled'] ) ? '1' : '0';
+        $secret_keys = [ 'ai_api_key', 'openai_api_key', 'wa_access_token', 'wa_app_secret' ];
         $db          = Wisply_Database::get_instance();
         // Remember the licence key we had, so a NEW one can be activated after saving
         $license_before = strtoupper( trim( (string) $db->get_setting( 'license_key', '' ) ) );
@@ -240,6 +244,7 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
             <button type="button" class="wisply-nav-btn"        data-target="proactive" role="tab"><span class="wisply-nav-ico">🔔</span><span class="wisply-nav-txt"><b>בועית יזומה</b><em>פתיחה אוטומטית</em></span></button>
             <button type="button" class="wisply-nav-btn"        data-target="leads"    role="tab"><span class="wisply-nav-ico">📥</span><span class="wisply-nav-txt"><b>לידים ודוחות</b><em>טפסים ומעקב</em></span></button>
             <button type="button" class="wisply-nav-btn"        data-target="shop"     role="tab"><span class="wisply-nav-ico">🛒</span><span class="wisply-nav-txt"><b>חנות ומסחר</b><em>מוצרים והזמנות</em></span></button>
+            <button type="button" class="wisply-nav-btn"        data-target="whatsapp" role="tab"><span class="wisply-nav-ico">💬</span><span class="wisply-nav-txt"><b>וואטסאפ</b><em>הבוט על WhatsApp</em></span></button>
             <button type="button" class="wisply-nav-btn"        data-target="design"   role="tab"><span class="wisply-nav-ico">🎨</span><span class="wisply-nav-txt"><b>עיצוב ותוכן</b><em>צבע, אוואטר, שפות</em></span></button>
             <button type="button" class="wisply-nav-btn"        data-target="advanced" role="tab"><span class="wisply-nav-ico">⚙️</span><span class="wisply-nav-txt"><b>מתקדם</b><em>רישיון ומערכת</em></span></button>
         </nav>
@@ -750,6 +755,74 @@ $product_name = defined( 'WISPLY_PRODUCT_NAME' ) ? WISPLY_PRODUCT_NAME : ( $sett
                         אפשר ללקוח לבדוק סטטוס הזמנה בצ׳אט
                     </label>
                     <p class="description">הלקוח מזין מספר הזמנה + המייל שאיתו הזמין, ומקבל את הסטטוס (בהכנה / נשלחה), הפריטים, הסכום ומספר מעקב אם קיים. שני הפרטים חייבים להתאים, כך שמייל בלבד לא חושף הזמנות של אף אחד.</p>
+                </td>
+            </tr>
+        </table>
+
+        </div><div class="wisply-pane" data-pane="whatsapp">
+
+        <h2>💬 חיבור וואטסאפ (WhatsApp Cloud API)</h2>
+        <p class="description" style="margin:0 0 14px">הבוט יענה גם בוואטסאפ, עם אותו מוח, אותו תוכן ואותם מוצרים. החיבור נעשה מול Meta WhatsApp Cloud API (חינמי). כל לקוח מחבר את מספר ה-WhatsApp Business שלו.</p>
+        <table class="form-table">
+            <tr>
+                <th>הפעלה</th>
+                <td>
+                    <label><input type="checkbox" name="wa_enabled" value="1" <?php checked( ( $settings['wa_enabled'] ?? '0' ), '1' ); ?>> הפעל מענה בוואטסאפ</label>
+                </td>
+            </tr>
+            <tr>
+                <th>כתובת Webhook</th>
+                <td>
+                    <input type="text" readonly onclick="this.select()" value="<?php echo esc_url( rest_url( 'wisply/v1/whatsapp' ) ); ?>" class="regular-text" dir="ltr">
+                    <p class="description">הדביקו את הכתובת הזו בהגדרות ה-Webhook של אפליקציית ה-Meta (Callback URL).</p>
+                </td>
+            </tr>
+            <tr>
+                <th>Verify Token</th>
+                <td>
+                    <input type="text" name="wa_verify_token" value="<?php echo esc_attr( $settings['wa_verify_token'] ?? '' ); ?>" class="regular-text" dir="ltr" placeholder="מחרוזת סודית שתמציאו">
+                    <p class="description">מחרוזת שתמציאו, והדביקו את אותה מחרוזת ב-Verify Token של ה-Webhook ב-Meta.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>Phone Number ID</th>
+                <td><input type="text" name="wa_phone_number_id" value="<?php echo esc_attr( $settings['wa_phone_number_id'] ?? '' ); ?>" class="regular-text" dir="ltr" placeholder="מזהה מספר הטלפון מ-Meta"></td>
+            </tr>
+            <tr>
+                <th>Access Token</th>
+                <td>
+                    <input type="password" name="wa_access_token" class="regular-text" dir="ltr" placeholder="<?php echo ( ( $settings['wa_access_token'] ?? '' ) !== '' ) ? '•••••••• (מוגדר)' : 'טוקן קבוע מ-Meta'; ?>" autocomplete="new-password">
+                    <p class="description">Permanent access token של המערכת מ-Meta (System User).</p>
+                </td>
+            </tr>
+            <tr>
+                <th>App Secret</th>
+                <td>
+                    <input type="password" name="wa_app_secret" class="regular-text" dir="ltr" placeholder="<?php echo ( ( $settings['wa_app_secret'] ?? '' ) !== '' ) ? '•••••••• (מוגדר)' : 'App Secret לאימות חתימה'; ?>" autocomplete="new-password">
+                    <p class="description">מאמת שהבקשות מגיעות באמת מ-Meta (חתימת HMAC). מומלץ מאוד.</p>
+                </td>
+            </tr>
+        </table>
+
+        <h2>🙋 העברה לנציג אנושי (Handoff)</h2>
+        <p class="description" style="margin:0 0 14px">כשלקוח מבקש לדבר עם נציג, הבוט יציג כפתור שמעביר את השיחה ישירות לוואטסאפ של העובד/ת, עם סיכום השיחה מוכן בהודעה. לא דורש הקמת WhatsApp API, עובד מהצ׳אט באתר.</p>
+        <table class="form-table">
+            <tr>
+                <th>הפעלה</th>
+                <td><label><input type="checkbox" name="handoff_enabled" value="1" <?php checked( ( $settings['handoff_enabled'] ?? '0' ), '1' ); ?>> אפשר העברה לנציג בוואטסאפ</label></td>
+            </tr>
+            <tr>
+                <th>וואטסאפ של הנציג/ה</th>
+                <td>
+                    <input type="text" name="handoff_wa_number" value="<?php echo esc_attr( $settings['handoff_wa_number'] ?? '' ); ?>" class="regular-text" dir="ltr" placeholder="972501234567">
+                    <p class="description">מספר בפורמט בינלאומי, ספרות בלבד (למשל 972501234567). לשם הזה תגיע השיחה.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>טקסט הכפתור</th>
+                <td>
+                    <input type="text" name="handoff_label" value="<?php echo esc_attr( $settings['handoff_label'] ?? '' ); ?>" class="regular-text" placeholder="המשך עם נציג בוואטסאפ">
+                    <p class="description">אופציונלי. אם ריק, ייכתב "המשך עם נציג בוואטסאפ".</p>
                 </td>
             </tr>
         </table>

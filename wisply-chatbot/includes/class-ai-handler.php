@@ -128,6 +128,28 @@ class Wisply_AI_Handler {
             $is_browse = (bool) preg_match( '/הצג|תראה|תראי|להראות|לראות|מה יש|אילו|איזה.{0,12}יש|קטלוג|רשימ|לעיין|כל ה|תן לי לראות/u', $user_message );
             $show_products = ! empty( $products )
                 && ( ! empty( $intent['has_filter'] ) || $is_browse );
+
+            // Consent-to-show net. The bot offers a product ("רוצה שאראה לך?") and the
+            // visitor answers with a bare "כן / תראה לי". That short reply carries no
+            // product keywords, so the fresh search above returned nothing — and without
+            // products in context the model deflects ("אין לי מידע") instead of showing
+            // what it just offered. When this message is such a confirmation, re-run the
+            // search on the PREVIOUS visitor message (which held the real intent) and force
+            // the carousel, since the visitor explicitly asked to see it.
+            if ( empty( $products ) && $this->is_show_consent( $user_message ) ) {
+                $prev = $this->last_user_message( $history );
+                if ( $prev !== '' ) {
+                    $intent2 = $woo->parse_query_intent( $prev );
+                    $reask   = ! empty( $intent2['has_filter'] )
+                        ? $woo->query_products( $intent2, $max_products )
+                        : $woo->search_products( $prev, $max_products );
+                    if ( ! empty( $reask ) ) {
+                        $products      = $reask;
+                        $show_products = true;
+                        $this->product_note = 'הגולש אישר שהוא רוצה לראות את מה שהצעת. הצג את הכרטיסים למטה, ואל תאמר "אין לי מידע".';
+                    }
+                }
+            }
         }
 
         // All chat goes through the Wisply AI proxy (2.16.0) — the licence key
@@ -244,6 +266,34 @@ class Wisply_AI_Handler {
         return $body;
     }
 
+    /** Direct OpenAI chat call with the site's own key (bypasses the Wisply proxy). */
+    private function openai_direct( string $key, array $req, int $timeout = 40 ): ?array {
+        $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', [
+            'timeout' => $timeout,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $key,
+                'Content-Type'  => 'application/json',
+            ],
+            'body'    => wp_json_encode( $req ),
+        ] );
+
+        if ( is_wp_error( $response ) ) {
+            $this->record_ai_error( 'openai/network: ' . $response->get_error_message() );
+            return null;
+        }
+        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( ! is_array( $body ) ) {
+            $this->record_ai_error( 'openai: HTTP ' . wp_remote_retrieve_response_code( $response ) . ' — תגובה לא תקינה' );
+            return null;
+        }
+        if ( isset( $body['error']['message'] ) ) {
+            $this->record_ai_error( 'openai: ' . $body['error']['message'] );
+        } else {
+            $this->record_ai_error( '' ); // clear on success
+        }
+        return $body;
+    }
+
     // ─── Claude (Anthropic) ───────────────────────────────────────────────────
 
     private function call_claude( string $user_message, string $lang, array $history, array $docs, array $products = [], int $turn = 0 ): array {
@@ -299,7 +349,13 @@ class Wisply_AI_Handler {
     // ─── OpenAI ───────────────────────────────────────────────────────────────
 
     private function call_openai( string $user_message, string $lang, array $history, array $docs, array $products = [], int $turn = 0 ): array {
-        if ( ! $this->license_key_present() ) {
+        // Bring-your-own-key path: when the site has its own OpenAI key configured, call
+        // OpenAI DIRECTLY (no Wisply proxy, no dependency on the licence server). Used for
+        // demos / self-hosted setups. Real subscriptions leave the key blank and run
+        // through the managed proxy, which needs a licence key the server recognises.
+        $direct_key = trim( (string) $this->db->get_setting( 'openai_api_key', '' ) );
+
+        if ( $direct_key === '' && ! $this->license_key_present() ) {
             return $this->fallback_no_config( $lang );
         }
 
@@ -316,12 +372,16 @@ class Wisply_AI_Handler {
             $this->build_message_array( $history, $user_message )
         );
 
-        $body = $this->proxy_request( 'chat', [
+        $req = [
             'model'       => $model,
             'max_tokens'  => 1024,
             'messages'    => $messages,
             'temperature' => 0.2,
-        ] );
+        ];
+
+        $body = $direct_key !== ''
+            ? $this->openai_direct( $direct_key, $req )
+            : $this->proxy_request( 'chat', $req );
 
         if ( isset( $body['choices'][0]['message']['content'] ) ) {
             $reply = trim( $body['choices'][0]['message']['content'] );
@@ -428,6 +488,15 @@ class Wisply_AI_Handler {
             $order_block = "\n\nבדיקת סטטוס הזמנה:\n"
                 . "• אם הלקוח שואל על הזמנה קיימת שלו (\"איפה ההזמנה שלי\", \"מה הסטטוס\", \"מתי יגיע המשלוח\", \"מספר מעקב\", \"בוצע חיוב?\") — הוסף בסוף התשובה את הסמן [ORDER_FORM]. הגולש יקבל טופס קצר להזנת מספר הזמנה + המייל שאיתו הזמין, והמערכת תבדוק ותציג את הסטטוס בעצמה.\n"
                 . "• כתוב משפט קצר ומזמין (למשל: אשמח לבדוק, רק צריך את מספר ההזמנה והמייל שאיתו הוזמנה) והוסף את הסמן. חשוב: אל תבקש את הפרטים כטקסט חופשי, אל תבדוק בעצמך, ולעולם אל תמציא סטטוס, תאריך או מספר מעקב.";
+        }
+
+        // Human handoff to WhatsApp — active when the owner set an agent number.
+        $handoff_block = '';
+        if ( $this->db->get_setting( 'handoff_enabled', '0' ) === '1'
+            && trim( (string) $this->db->get_setting( 'handoff_wa_number', '' ) ) !== '' ) {
+            $handoff_block = "\n\nהעברה לנציג אנושי:\n"
+                . "• אם הלקוח מבקש לדבר עם נציג / בן אדם / מישהו אמיתי, או שאתה מזהה תסכול או צורך שדורש טיפול אנושי — כתוב משפט קצר וחם (למשל \"אני מעביר אותך לנציג/ה שלנו בוואטסאפ, רגע אחד\") והוסף בסוף התשובה את הסמן [HANDOFF]. הגולש יקבל כפתור שמעביר אותו לוואטסאפ של הנציג עם סיכום השיחה.\n"
+                . "• אחרי שהלקוח ביקש נציג אל תמשיך לנסות לענות בעצמך על אותה שאלה, פשוט העבר.";
         }
 
         // Per-site owner rules (empty by default). Authoritative business knowledge,
@@ -564,6 +633,7 @@ $catalog_block
 $match_block
 $bundle_block
 $order_block
+$handoff_block
 PROMPT;
     }
 
@@ -611,6 +681,33 @@ PROMPT;
         }
         $messages[] = [ 'role' => 'user', 'content' => $user_message ];
         return $messages;
+    }
+
+    /**
+     * Is this a short "yes / show me" reply that confirms a product offer the bot just
+     * made? Kept tight (length-capped, explicit affirmatives only) so a normal sentence
+     * that merely starts with "כן" is not mistaken for a bare confirmation.
+     */
+    private function is_show_consent( string $msg ): bool {
+        $m = trim( $msg );
+        if ( $m === '' || mb_strlen( $m ) > 40 ) return false;
+        // Explicit "show me / send them".
+        if ( preg_match( '/(תראה|תראי|תראו|להראות|לראות|הצג|הראה|הראו|שלח|תשלח)/u', $m ) ) return true;
+        // Bare affirmatives at the start, as a standalone token. NOTE: PCRE \b does not
+        // work against Hebrew letters, so match "end-or-separator" explicitly instead —
+        // otherwise "כן" on its own would never match (and "כנראה" must NOT match).
+        if ( preg_match( '/^(כן|בטח|בהחלט|בבקשה|אשמח|סבבה|יאללה|אוקיי|אוקי|וכן|ok|okay|yes|sure)($|[\s,.!;:])/iu', $m ) ) return true;
+        return false;
+    }
+
+    /** The most recent visitor message from the (newest-first) history, or ''. */
+    private function last_user_message( array $history ): string {
+        foreach ( $history as $h ) {
+            if ( ( $h['role'] ?? '' ) === 'user' ) {
+                return trim( (string) ( $h['content'] ?? '' ) );
+            }
+        }
+        return '';
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────

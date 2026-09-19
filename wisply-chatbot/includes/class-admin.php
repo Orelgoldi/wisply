@@ -101,8 +101,8 @@ class Wisply_Admin {
             true
         );
         $settings = $this->db->get_all_settings();
-        // Never expose API keys to the browser — replace with a masked indicator
-        foreach ( [ 'ai_api_key', 'openai_api_key' ] as $k ) {
+        // Never expose API keys / tokens to the browser — replace with a masked indicator
+        foreach ( [ 'ai_api_key', 'openai_api_key', 'wa_access_token', 'wa_app_secret' ] as $k ) {
             if ( ! empty( $settings[ $k ] ) ) {
                 $settings[ $k ] = '••••••••';
             }
@@ -235,10 +235,12 @@ class Wisply_Admin {
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'report_recipients', 'report_daily', 'report_weekly',
             'woo_enabled', 'woo_max_products', 'woo_show_stock', 'woo_visual_search', 'woo_bundle_enabled', 'woo_order_status_enabled',
+            'wa_enabled', 'wa_phone_number_id', 'wa_access_token', 'wa_verify_token', 'wa_app_secret',
+            'handoff_enabled', 'handoff_wa_number', 'handoff_label',
             'lead_field_name', 'lead_field_phone', 'lead_field_email',
             'conversation_end_action', 'max_messages', 'wrapup_margin',
         ];
-        $secret_keys = [ 'ai_api_key', 'openai_api_key' ];
+        $secret_keys = [ 'ai_api_key', 'openai_api_key', 'wa_access_token', 'wa_app_secret' ];
         $errors      = [];
 
         $params = $_POST;
