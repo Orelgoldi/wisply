@@ -13,17 +13,28 @@
   const $id = id => shadow ? shadow.getElementById(id) : null;
 
   /* ── Language ── */
+  const SUPPORTED = ['he','en','ru','ar'];
+  /* Languages the site owner turned on (comma list from settings). Empty → all. */
+  const ENABLED = (() => {
+    const raw = String(S.enabled_langs || '').toLowerCase();
+    const list = raw.split(',').map(s => s.trim()).filter(s => SUPPORTED.includes(s));
+    const uniq = list.filter((l, i) => list.indexOf(l) === i);
+    return uniq.length ? uniq : SUPPORTED.slice();
+  })();
+  const DEFAULT_LANG = ENABLED.includes(String(S.default_lang || '').toLowerCase())
+    ? String(S.default_lang).toLowerCase() : ENABLED[0];
+  const langLabel = l => l === 'he' ? 'עב' : l === 'ar' ? 'ع' : l.toUpperCase();
   let lang = (() => {
     const saved = sessionStorage.getItem('m360_lang');
-    if (saved) return saved;
+    if (saved && ENABLED.includes(saved)) return saved;
     const l = (CFG.lang || 'he_IL').slice(0, 2).toLowerCase();
-    return ['he','en','ru'].includes(l) ? l : 'he';
+    return ENABLED.includes(l) ? l : DEFAULT_LANG;
   })();
   /* Switch language WITHOUT rebuilding the whole widget. Rebuilding (replacing the
      entire shadow DOM + re-wiring every listener) was fragile and could leave the
      widget unresponsive ("stuck") on mobile. Instead we just relabel in place. */
   function setLang(l) {
-    if (!['he','en','ru'].includes(l) || l === lang) return;
+    if (!ENABLED.includes(l) || l === lang) return;
     lang = l;
     sessionStorage.setItem('m360_lang', l);
     try { stopListen(); stopAudio(); endVoice(); } catch (e) {}
@@ -75,7 +86,8 @@
     if (!hadActivity) return;       // nothing to end
     endChat({ he:'⏱️ השיחה הסתיימה עקב חוסר פעילות.',
               en:'⏱️ The conversation ended due to inactivity.',
-              ru:'⏱️ Разговор завершён из-за неактивности.' }[lang] || '');
+              ru:'⏱️ Разговор завершён из-за неактивности.',
+              ar:'⏱️ انتهت المحادثة بسبب عدم النشاط.' }[lang] || '');
   }
 
   /* Managed end (FR-007A): never end without an action — freeze the composer and
@@ -175,6 +187,21 @@
       vm_muted:'Микрофон выключен', vm_error:'Секунду, попробуем снова...',
       vm_mute:'Выключить микрофон', vm_end:'Завершить', vm_connecting:'Соединение...',
     },
+    ar: {
+      placeholder:'اكتب رسالة...', online:'يرد عادةً على الفور', call:'اتصلوا', dir:'الاتجاهات',
+      error:'عذرًا، حدث خطأ ما. حاولوا مرة أخرى أو اتصلوا بنا هاتفيًا.',
+      lead_title:'يسعدنا التواصل معكم — اتركوا التفاصيل', lead_name:'الاسم الكامل',
+      lead_phone:'الهاتف', lead_email:'البريد الإلكتروني (اختياري)', lead_btn:'إرسال', lead_ok:'شكرًا! سنتواصل معكم قريبًا.',
+      lead_required:'يرجى تعبئة جميع الحقول المطلوبة', lead_contact:'يرجى ترك رقم هاتف أو بريد إلكتروني حتى نتمكن من التواصل معكم', call_now:'📞 اتصلوا الآن',
+      chat_ended:'✅ انتهت المحادثة. شكرًا لتواصلكم معنا!',
+      suggest:'أسئلة شائعة', what_to_know:'ماذا تريد أن تعرف؟', new_chat:'بدء محادثة جديدة',
+      ask_yes:'نعم، بكل سرور', ask_no:'لا، شكرًا', ask_declined:'لا مشكلة! أنا هنا إذا احتجت المزيد من المعلومات 😊',
+      chips:['ما هي أقسام إعادة التأهيل المتوفرة؟','كيف تتم عملية القبول؟','أين تقعون؟','حدثني عن ورش العمل'],
+      voice_call:'مكالمة صوتية', vm_hint:'تحدث بحرية — سأرد عليك صوتيًا',
+      vm_listen:'أستمع...', vm_think:'أفكر...', vm_speak:'أتحدث...',
+      vm_muted:'الميكروفون مكتوم', vm_error:'لحظة، سنحاول مرة أخرى...',
+      vm_mute:'كتم الميكروفون', vm_end:'إنهاء المكالمة', vm_connecting:'جارٍ الاتصال...',
+    },
   };
   const t = k => (T[lang] || T.he)[k];
 
@@ -236,11 +263,11 @@
         <footer class="m-foot">
           <button class="m-speaker" id="m-speaker" aria-label="הקראה קולית" title="הקראת תשובות בקול">${ICO_SPEAKER_OFF}</button>
           <span class="m-brand">מופעל ע״י Medical360 AI</span>
-          <div class="m-langs" role="group" aria-label="בחירת שפה">
-            ${['he','en','ru'].map(l =>
-              `<button class="m-lang${lang===l?' on':''}" data-l="${l}" aria-pressed="${lang===l}">${l==='he'?'עב':l.toUpperCase()}</button>`
+          ${ENABLED.length > 1 ? `<div class="m-langs" role="group" aria-label="בחירת שפה">
+            ${ENABLED.map(l =>
+              `<button class="m-lang${lang===l?' on':''}" data-l="${l}" aria-pressed="${lang===l}">${langLabel(l)}</button>`
             ).join('')}
-          </div>
+          </div>` : ''}
         </footer>
       </div>`;
 
@@ -382,7 +409,8 @@
     return ({
       he: 'היי 👋 אשמח לתת לך עוד פרטים על ' + subject + '. יש לך שאלה?',
       en: 'Hi 👋 Happy to tell you more about ' + subject + '. Any questions?',
-      ru: 'Здравствуйте 👋 Расскажу подробнее о ' + subject + '. Есть вопросы?'
+      ru: 'Здравствуйте 👋 Расскажу подробнее о ' + subject + '. Есть вопросы?',
+      ar: 'مرحبًا 👋 يسعدني أن أخبرك المزيد عن ' + subject + '. هل لديك سؤال؟'
     }[lang]) || '';
   }
 
@@ -802,11 +830,11 @@
     if (!url) return;
 
     const labels = {
-      donate:    { he:'💝 למעבר לדף התרומות', en:'💝 Go to donations', ru:'💝 Перейти к пожертвованиям' },
-      jobs:      { he:'💼 לדף הדרושים',        en:'💼 View job openings', ru:'💼 Вакансии' },
-      podcast:   { he:'🎧 להאזנה לפודקאסט',     en:'🎧 Listen to the podcast', ru:'🎧 Слушать подкаст' },
-      volunteer: { he:'🤝 להתנדבות',           en:'🤝 Volunteer', ru:'🤝 Стать волонтёром' },
-      contact:   { he:'📞 ליצירת קשר',         en:'📞 Contact us', ru:'📞 Связаться' },
+      donate:    { he:'💝 למעבר לדף התרומות', en:'💝 Go to donations', ru:'💝 Перейти к пожертвованиям', ar:'💝 الانتقال إلى صفحة التبرعات' },
+      jobs:      { he:'💼 לדף הדרושים',        en:'💼 View job openings', ru:'💼 Вакансии', ar:'💼 صفحة الوظائف' },
+      podcast:   { he:'🎧 להאזנה לפודקאסט',     en:'🎧 Listen to the podcast', ru:'🎧 Слушать подкаст', ar:'🎧 الاستماع إلى البودكاست' },
+      volunteer: { he:'🤝 להתנדבות',           en:'🤝 Volunteer', ru:'🤝 Стать волонтёром', ar:'🤝 التطوع' },
+      contact:   { he:'📞 ליצירת קשר',         en:'📞 Contact us', ru:'📞 Связаться', ar:'📞 التواصل معنا' },
     };
     const label = (labels[key] || {})[lang] || (labels[key] || {}).he || key;
 
@@ -908,7 +936,7 @@
   let audioCtx = null;
   let speakMode = sessionStorage.getItem('m360_speak') === '1';
 
-  const localeFor = l => l === 'en' ? 'en-US' : l === 'ru' ? 'ru-RU' : 'he-IL';
+  const localeFor = l => l === 'en' ? 'en-US' : l === 'ru' ? 'ru-RU' : l === 'ar' ? 'ar-SA' : 'he-IL';
 
   function toggleListen() {
     if (!MIC_AVAILABLE) return;
@@ -1098,7 +1126,8 @@
   function micDeniedMsg() {
     return { he:'🎤 לא ניתנה הרשאה למיקרופון. אפשר להפעיל אותה בהגדרות הדפדפן.',
              en:'🎤 Microphone permission was denied. You can enable it in your browser settings.',
-             ru:'🎤 Доступ к микрофону запрещён. Включите его в настройках браузера.' }[lang] || '';
+             ru:'🎤 Доступ к микрофону запрещён. Включите его в настройках браузера.',
+             ar:'🎤 لم يتم منح إذن الميكروفون. يمكنك تفعيله من إعدادات المتصفح.' }[lang] || '';
   }
 
   /* ── Immersive Voice Mode (ChatGPT-style hands-free call) ───────────────────
@@ -1633,7 +1662,7 @@
   /* ── Helpers ── */
   function scroll(el) { requestAnimationFrame(() => el.scrollTop = el.scrollHeight); }
   function autoH(el)  { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 96) + 'px'; }
-  function clock()    { return new Date().toLocaleTimeString(lang==='ru'?'ru-RU':lang==='en'?'en-US':'he-IL', {hour:'2-digit', minute:'2-digit'}); }
+  function clock()    { return new Date().toLocaleTimeString(localeFor(lang), {hour:'2-digit', minute:'2-digit'}); }
   function esc(s)     { return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function fmt(s)     { return esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>'); }
 

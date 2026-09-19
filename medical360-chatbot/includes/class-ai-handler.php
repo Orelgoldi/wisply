@@ -7,7 +7,7 @@ class M360_AI_Handler {
     private M360_Database $db;
 
     // Language codes as returned by the client
-    private const SUPPORTED_LANGS = [ 'he', 'en', 'ru' ];
+    private const SUPPORTED_LANGS = [ 'he', 'en', 'ru', 'ar' ];
 
     private function __construct() {
         $this->db = M360_Database::get_instance();
@@ -239,6 +239,7 @@ class M360_AI_Handler {
         $lang_instruction = match ( $lang ) {
             'en' => 'Always reply in English only, regardless of the question language.',
             'ru' => 'Всегда отвечай только на русском языке.',
+            'ar' => 'أجب دائمًا باللغة العربية فقط، بغض النظر عن لغة السؤال.',
             default => 'ענה בעברית בלבד.',
         };
 
@@ -273,7 +274,7 @@ class M360_AI_Handler {
         // Job-seeker flow (FR): a *specific* role interest → jobs page + lead form together
         $jobs_block = '';
         if ( is_array( $action_links ) && ! empty( $action_links['jobs'] ) ) {
-            $jobs_block = "\n\nטיפול בפניות דרושים/קריירה (תקף בכל שפה — עברית/אנגלית/רוסית):\n"
+            $jobs_block = "\n\nטיפול בפניות דרושים/קריירה (תקף בכל שפה — עברית/אנגלית/רוסית/ערבית):\n"
                 . "• אם הפונה מחפש עבודה ומציין תפקיד / תחום / משרה ספציפיים שמעניינים אותו "
                 . "(למשל \"אני פיזיותרפיסט ומחפש עבודה\", \"יש משרה לאחות?\", \"I'm a nurse looking for a job\", \"ищу работу медсестрой\") — "
                 . "בצע את שני הדברים **באותה תשובה**: (א) הוסף [ACTION:jobs] כדי להפנות אותו לדף הדרושים; "
@@ -419,6 +420,7 @@ PROMPT;
             'he' => [ 'אינני יודע', 'לא מצאתי', 'אין לי מידע', 'צור קשר', 'פנה אלינו' ],
             'en' => [ "I don't know", "I couldn't find", 'no information', 'contact us', 'please call' ],
             'ru' => [ 'не знаю', 'не нашел', 'нет информации', 'свяжитесь', 'позвоните' ],
+            'ar' => [ 'لا أعرف', 'لم أجد', 'لا توجد معلومات', 'اتصل بنا', 'تواصل معنا' ],
         ];
         $lower = mb_strtolower( $reply );
         foreach ( ( $markers[ $lang ] ?? [] ) as $marker ) {
@@ -431,6 +433,7 @@ PROMPT;
         return match ( $lang ) {
             'en'    => 'Sorry, I encountered an error. Please try again or contact us by phone.',
             'ru'    => 'Извините, произошла ошибка. Пожалуйста, попробуйте ещё раз или позвоните нам.',
+            'ar'    => 'عذرًا، حدث خطأ. يرجى المحاولة مرة أخرى أو الاتصال بنا هاتفيًا.',
             default => 'מצטערים, אירעה שגיאה. נסה שוב או צור קשר טלפוני.',
         };
     }
@@ -439,6 +442,7 @@ PROMPT;
         $msg = match ( $lang ) {
             'en'    => 'The chatbot is not configured yet. Please contact the site administrator.',
             'ru'    => 'Чат-бот ещё не настроен. Обратитесь к администратору сайта.',
+            'ar'    => 'لم يتم إعداد المحادثة بعد. يرجى التواصل مع مسؤول الموقع.',
             default => 'הצ׳אט טרם הוגדר. אנא פנה למנהל האתר.',
         };
         return [ 'reply' => $msg, 'unanswered' => true ];
@@ -468,7 +472,7 @@ PROMPT;
         if ( $content === '' ) return [];
         $content = mb_substr( $content, 0, 2800 );
 
-        $lang_name = [ 'he' => 'עברית', 'en' => 'English', 'ru' => 'русском языке' ][ $lang ] ?? 'עברית';
+        $lang_name = [ 'he' => 'עברית', 'en' => 'English', 'ru' => 'русском языке', 'ar' => 'اللغة العربية' ][ $lang ] ?? 'עברית';
         $system    = 'אתה יוצר שאלות נפוצות קצרות. החזר אך ורק מערך JSON של 4 מחרוזות (שאלות), ללא שום טקסט נוסף.';
         $user      = "להלן תוכן מתוך עמוד באתר מדיקל קר בשם \"$title\". "
             . "צור בדיוק 4 שאלות קצרות וברורות (עד 6 מילים כל אחת) שגולש המתעניין בעמוד הזה עשוי לשאול, ב$lang_name. "
@@ -506,7 +510,7 @@ PROMPT;
         }
         if ( trim( $transcript ) === '' ) return '';
 
-        $lang_name = [ 'he' => 'עברית', 'en' => 'English', 'ru' => 'русском языке' ][ $lang ] ?? 'עברית';
+        $lang_name = [ 'he' => 'עברית', 'en' => 'English', 'ru' => 'русском языке', 'ar' => 'اللغة العربية' ][ $lang ] ?? 'עברית';
         $system    = 'אתה מסכם שיחות שירות בקצרה ובאופן ענייני, ללא פתיח.';
         $user      = "סכם את השיחה הבאה במשפט אחד עד שניים ב$lang_name — מה הפונה רצה ובמה התעניין:\n\n$transcript";
         return trim( $this->raw_completion( $system, $user, 150 ) );
@@ -659,6 +663,7 @@ PROMPT;
         $lang_line = match ( $lang ) {
             'en' => 'Speak and reply in English.',
             'ru' => 'Говори и отвечай только по-русски.',
+            'ar' => 'تحدث وأجب باللغة العربية فقط.',
             default => 'דבר וענה בעברית בלבד.',
         };
         $phone      = (string) $this->db->get_setting( 'phone', '' );

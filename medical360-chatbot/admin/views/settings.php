@@ -15,16 +15,16 @@ if ( isset( $_POST['m360_settings_nonce'] ) ) {
             'ai_provider', 'ai_api_key', 'ai_model',
             'openai_api_key', 'openai_model',
             'primary_color', 'secondary_color', 'font_family', 'bubble_position',
-            'greeting_he', 'greeting_en', 'greeting_ru',
-            'widget_title_he', 'widget_title_en', 'widget_title_ru',
+            'greeting_he', 'greeting_en', 'greeting_ru', 'greeting_ar',
+            'widget_title_he', 'widget_title_en', 'widget_title_ru', 'widget_title_ar',
             'phone', 'map_url', 'max_context_docs', 'conversation_ttl_days',
             'voice_enabled', 'voice_provider', 'tts_model', 'tts_voice', 'stt_model',
             'realtime_enabled', 'realtime_model', 'voice_text_mode',
-            'proactive_enabled', 'proactive_delay', 'proactive_msg_he', 'proactive_msg_en', 'proactive_msg_ru',
+            'proactive_enabled', 'proactive_delay', 'proactive_msg_he', 'proactive_msg_en', 'proactive_msg_ru', 'proactive_msg_ar',
             'desktop_autoopen_enabled', 'desktop_autoopen_delay',
-            'desktop_autoopen_msg_he', 'desktop_autoopen_msg_en', 'desktop_autoopen_msg_ru',
-            'consent_required', 'consent_version', 'consent_text_he', 'consent_text_en', 'consent_text_ru',
-            'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
+            'desktop_autoopen_msg_he', 'desktop_autoopen_msg_en', 'desktop_autoopen_msg_ru', 'desktop_autoopen_msg_ar',
+            'consent_required', 'consent_version', 'consent_text_he', 'consent_text_en', 'consent_text_ru', 'consent_text_ar',
+            'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru', 'emergency_msg_ar',
             'emergency_phone', 'emergency_eran_url', 'emergency_sahar_url',
             'logicare_enabled', 'logicare_base_url', 'logicare_api_key',
             'logicare_default_department_id', 'logicare_job_department_id', 'logicare_routing_rules',
@@ -44,11 +44,11 @@ if ( isset( $_POST['m360_settings_nonce'] ) ) {
         $secret_keys = [ 'ai_api_key', 'openai_api_key', 'logicare_api_key' ];
         // Multi-line fields must keep their newlines
         $textarea_keys = [
-            'greeting_he', 'greeting_en', 'greeting_ru',
-            'consent_text_he', 'consent_text_en', 'consent_text_ru',
-            'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru',
-            'proactive_msg_he', 'proactive_msg_en', 'proactive_msg_ru',
-            'desktop_autoopen_msg_he', 'desktop_autoopen_msg_en', 'desktop_autoopen_msg_ru',
+            'greeting_he', 'greeting_en', 'greeting_ru', 'greeting_ar',
+            'consent_text_he', 'consent_text_en', 'consent_text_ru', 'consent_text_ar',
+            'emergency_msg_he', 'emergency_msg_en', 'emergency_msg_ru', 'emergency_msg_ar',
+            'proactive_msg_he', 'proactive_msg_en', 'proactive_msg_ru', 'proactive_msg_ar',
+            'desktop_autoopen_msg_he', 'desktop_autoopen_msg_en', 'desktop_autoopen_msg_ru', 'desktop_autoopen_msg_ar',
             'logicare_routing_rules',
             'report_recipients',
         ];
@@ -307,6 +307,10 @@ function m360_sel( string $key, string $val ): string {
                 <th>הודעה — Русский</th>
                 <td><input type="text" name="proactive_msg_ru" class="large-text" value="<?php echo m360_v('proactive_msg_ru'); ?>"></td>
             </tr>
+            <tr>
+                <th>הודעה — العربية</th>
+                <td><input type="text" name="proactive_msg_ar" class="large-text" dir="rtl" value="<?php echo m360_v('proactive_msg_ar'); ?>"></td>
+            </tr>
         </table>
 
         <h2>🖥️ פתיחה אוטומטית בדסקטופ</h2>
@@ -340,6 +344,10 @@ function m360_sel( string $key, string $val ): string {
             <tr>
                 <th>הודעת פתיחה — Русский</th>
                 <td><input type="text" name="desktop_autoopen_msg_ru" class="large-text" value="<?php echo m360_v('desktop_autoopen_msg_ru'); ?>"></td>
+            </tr>
+            <tr>
+                <th>הודעת פתיחה — العربية</th>
+                <td><input type="text" name="desktop_autoopen_msg_ar" class="large-text" dir="rtl" value="<?php echo m360_v('desktop_autoopen_msg_ar'); ?>"></td>
             </tr>
         </table>
 
@@ -441,6 +449,10 @@ function m360_sel( string $key, string $val ): string {
                 <th>נוסח ההסכמה — Русский</th>
                 <td><textarea name="consent_text_ru" rows="3" class="large-text"><?php echo esc_textarea( $settings['consent_text_ru'] ?? '' ); ?></textarea></td>
             </tr>
+            <tr>
+                <th>נוסח ההסכמה — العربية</th>
+                <td><textarea name="consent_text_ar" rows="3" class="large-text" dir="rtl"><?php echo esc_textarea( $settings['consent_text_ar'] ?? '' ); ?></textarea></td>
+            </tr>
         </table>
 
         <h2>🚨 הודעת חירום (Escalation)</h2>
@@ -457,6 +469,10 @@ function m360_sel( string $key, string $val ): string {
             <tr>
                 <th>הודעה — Русский</th>
                 <td><textarea name="emergency_msg_ru" rows="2" class="large-text"><?php echo esc_textarea( $settings['emergency_msg_ru'] ?? '' ); ?></textarea></td>
+            </tr>
+            <tr>
+                <th>הודעה — العربية</th>
+                <td><textarea name="emergency_msg_ar" rows="2" class="large-text" dir="rtl"><?php echo esc_textarea( $settings['emergency_msg_ar'] ?? '' ); ?></textarea></td>
             </tr>
             <tr>
                 <th>טלפון חירום</th>
@@ -622,6 +638,10 @@ function m360_sel( string $key, string $val ): string {
                 <td><input type="text" name="widget_title_ru" class="regular-text" value="<?php echo m360_v('widget_title_ru'); ?>"></td>
             </tr>
             <tr>
+                <th>כותרת Widget — العربية</th>
+                <td><input type="text" name="widget_title_ar" class="regular-text" dir="rtl" value="<?php echo m360_v('widget_title_ar'); ?>"></td>
+            </tr>
+            <tr>
                 <th>הודעת פתיחה — עברית</th>
                 <td><textarea name="greeting_he" rows="2" class="regular-text"><?php echo esc_textarea( $settings['greeting_he'] ?? '' ); ?></textarea></td>
             </tr>
@@ -632,6 +652,10 @@ function m360_sel( string $key, string $val ): string {
             <tr>
                 <th>הודעת פתיחה — Русский</th>
                 <td><textarea name="greeting_ru" rows="2" class="regular-text"><?php echo esc_textarea( $settings['greeting_ru'] ?? '' ); ?></textarea></td>
+            </tr>
+            <tr>
+                <th>הודעת פתיחה — العربية</th>
+                <td><textarea name="greeting_ar" rows="2" class="regular-text" dir="rtl"><?php echo esc_textarea( $settings['greeting_ar'] ?? '' ); ?></textarea></td>
             </tr>
         </table>
 

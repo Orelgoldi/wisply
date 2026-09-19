@@ -3,6 +3,10 @@
 All notable changes to this plugin are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versioning is [SemVer](https://semver.org/).
 
+## [4.8.0] — 2026-07-19
+### Added
+- **Arabic as a full fourth language.** The bot now answers in Arabic (language detection, RTL, voice + text-to-speech, default UI strings and all per-language content fields — `greeting_ar`, widget title, proactive/desktop-autoopen messages, consent text, emergency message, and action-button labels). Arabic is enabled by default alongside Hebrew, English and Russian; no plan gating on this internal build.
+
 ## [4.7.0] — 2026-07-15
 ### Added
 - **Lead-form field control** — each of שם / טלפון / אימייל can be set to **חובה / רשות / מוסתר**.
