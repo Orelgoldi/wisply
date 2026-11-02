@@ -35,6 +35,7 @@ require_once WISPLY_PLUGIN_DIR . 'includes/class-whatsapp.php';
 // ── Real-estate edition features ──
 require_once WISPLY_PLUGIN_DIR . 'includes/class-projects.php';        // project gallery store + crawl
 require_once WISPLY_PLUGIN_DIR . 'includes/class-google-calendar.php'; // OAuth + free/busy + event insert
+require_once WISPLY_PLUGIN_DIR . 'includes/class-crm.php';             // generic CRM webhook (bookings + leads)
 require_once WISPLY_PLUGIN_DIR . 'includes/class-scheduler.php';       // availability windows + booking
 require_once WISPLY_PLUGIN_DIR . 'includes/class-admin.php';
 require_once WISPLY_PLUGIN_DIR . 'includes/class-realestate-admin.php';  // edition admin screens
@@ -84,6 +85,7 @@ add_action( 'plugins_loaded', function () {
     // ── Real-estate edition features ──
     Wisply_Projects::get_instance();          // project gallery (REST + crawl + admin)
     Wisply_Google_Calendar::get_instance();   // Google OAuth callback + token store
+    Wisply_CRM::get_instance();               // generic CRM webhook (hooks leads)
     Wisply_Scheduler::get_instance();         // availability + booking REST
     Realestate_Profile::get_instance();       // one-time persona/settings seed
     Wisply_Admin::get_instance();

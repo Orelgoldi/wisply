@@ -19,6 +19,7 @@ class Realestate_Admin {
 		add_action( 'admin_post_wisply_save_booking', [ $this, 'save_booking' ] );
 		add_action( 'admin_post_wisply_save_projects', [ $this, 'save_projects' ] );
 		add_action( 'admin_post_wisply_seed_projects', [ $this, 'seed_projects' ] );
+		add_action( 'admin_post_wisply_crm_test', [ $this, 'crm_test' ] );
 	}
 
 	public static function get_instance(): self {
@@ -48,7 +49,9 @@ class Realestate_Admin {
 			<?php if ( $notice === 'connected' ) : ?><div class="notice notice-success"><p>יומן Google חובר בהצלחה ✓</p></div>
 			<?php elseif ( $notice === 'error' ) : ?><div class="notice notice-error"><p>חיבור היומן נכשל. בדקו את מזהה הלקוח/הסוד ונסו שוב.</p></div>
 			<?php elseif ( $notice === 'disconnected' ) : ?><div class="notice notice-info"><p>יומן Google נותק.</p></div>
-			<?php elseif ( $notice === 'saved' ) : ?><div class="notice notice-success"><p>נשמר.</p></div><?php endif; ?>
+			<?php elseif ( $notice === 'saved' ) : ?><div class="notice notice-success"><p>נשמר.</p></div>
+			<?php elseif ( preg_match( '/^crmok-(\d+)$/', $notice, $m ) ) : ?><div class="notice notice-success"><p>ה-webhook הגיב בהצלחה (HTTP <?php echo (int) $m[1]; ?>) ✓</p></div>
+			<?php elseif ( preg_match( '/^crmfail-(\d+)$/', $notice, $m ) ) : ?><div class="notice notice-error"><p>בדיקת ה-webhook נכשלה (HTTP <?php echo (int) $m[1]; ?>). בדקו את הכתובת וההפעלה.</p></div><?php endif; ?>
 
 			<h2>סנכרון יומן Google</h2>
 			<p>סטטוס: <strong><?php echo $conn ? 'מחובר ✓' : 'לא מחובר'; ?></strong></p>
@@ -85,7 +88,22 @@ class Realestate_Admin {
 					<tr><th>כמה ימים קדימה</th><td><input type="number" name="booking_days_ahead" value="<?php echo esc_attr( $this->db->get_setting( 'booking_days_ahead', '14' ) ); ?>" min="1" max="60"></td></tr>
 					<tr><th>אימייל להתראות</th><td><input type="email" name="booking_notify_email" class="regular-text" value="<?php echo esc_attr( $this->db->get_setting( 'booking_notify_email', '' ) ); ?>" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>"></td></tr>
 				</table>
+
+				<h2>סנכרון ל-CRM (אופציונלי)</h2>
+				<p class="description">כל פגישה שנקבעת וכל ליד שנאסף יישלחו כ-JSON לכתובת ה-webhook. אפשר לכוון לכל CRM שמקבל webhook, או ל-Make/Zapier שמזרים ל-CRM שלכם.</p>
+				<table class="form-table">
+					<tr><th>הפעלת סנכרון CRM</th><td><label><input type="checkbox" name="crm_enabled" value="1" <?php checked( (string) $this->db->get_setting( 'crm_enabled', '0' ) === '1' ); ?>> שלח פגישות ולידים ל-CRM</label></td></tr>
+					<tr><th>כתובת Webhook</th><td><input type="url" name="crm_webhook_url" class="regular-text" value="<?php echo esc_attr( $this->db->get_setting( 'crm_webhook_url', '' ) ); ?>" placeholder="https://hook.example.com/..."></td></tr>
+					<tr><th>סוד לחתימה (אופציונלי)</th><td><input type="password" name="crm_webhook_secret" class="regular-text" value="<?php echo esc_attr( $this->db->get_setting( 'crm_webhook_secret', '' ) ); ?>"> <span class="description">אם מוגדר, כל בקשה תיחתם ב-X-Wisply-Signature (HMAC-SHA256).</span></td></tr>
+				</table>
 				<?php submit_button( 'שמירה' ); ?>
+			</form>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:-10px">
+				<?php wp_nonce_field( 'wisply_crm_test' ); ?>
+				<input type="hidden" name="action" value="wisply_crm_test">
+				<?php submit_button( 'בדיקת webhook', 'secondary', 'submit', false ); ?>
+				<span class="description">שולח אירוע בדיקה לכתובת שנשמרה.</span>
 			</form>
 
 			<h2>חיבור / ניתוק יומן</h2>
@@ -135,7 +153,25 @@ class Realestate_Admin {
 		$email = sanitize_email( wp_unslash( $_POST['booking_notify_email'] ?? '' ) );
 		$this->db->set_setting( 'booking_notify_email', $email );
 
+		// CRM webhook.
+		$this->db->set_setting( 'crm_enabled', empty( $_POST['crm_enabled'] ) ? '0' : '1' );
+		$this->db->set_setting( 'crm_webhook_url', esc_url_raw( wp_unslash( $_POST['crm_webhook_url'] ?? '' ) ) );
+		$crm_secret = (string) wp_unslash( $_POST['crm_webhook_secret'] ?? '' );
+		if ( $crm_secret !== '' ) $this->db->set_setting( 'crm_webhook_secret', sanitize_text_field( $crm_secret ) );
+
 		wp_safe_redirect( admin_url( 'admin.php?page=wisply-booking&gcal=saved' ) );
+		exit;
+	}
+
+	/** Fire a sample event at the configured CRM webhook and report the HTTP result. */
+	public function crm_test(): void {
+		if ( ! current_user_can( 'manage_options' ) ) wp_die( 'forbidden' );
+		check_admin_referer( 'wisply_crm_test' );
+		$r = class_exists( 'Wisply_CRM' )
+			? Wisply_CRM::get_instance()->send( 'test', [ 'note' => 'Wisply CRM test', 'at' => current_time( 'mysql' ) ] )
+			: [ 'ok' => false, 'code' => 0 ];
+		$status = $r['ok'] ? 'crmok-' . (int) $r['code'] : 'crmfail-' . (int) $r['code'];
+		wp_safe_redirect( admin_url( 'admin.php?page=wisply-booking&gcal=' . $status ) );
 		exit;
 	}
 

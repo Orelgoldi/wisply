@@ -5,6 +5,7 @@
 
 ## [1.0.0] — 2026-11-02
 ### Added (real-estate edition)
+- **סנכרון CRM גנרי** (`class-crm.php`): כל פגישה וכל ליד נשלחים כ-JSON ל-webhook מוגדר, חתום ב-X-Wisply-Signature (HMAC) כשמוגדר סוד. מסך "פגישות" כולל הפעלה, כתובת, סוד וכפתור בדיקה. hook `wisply_lead_captured` מוסיף גם לידים.
 - **מהדורת נדל״ן ייעודית** על בסיס מנוע Wisply (כמו Be.live): `class-realestate-profile.php`
   + `realestate-persona.he.txt` זורעים פרסונת יועץ נדל״ן, מראה וואטסאפ וזמינות ברירת מחדל.
 - **מראה וואטסאפ** — בועות בסגנון וואטסאפ + **וי כחול (נקרא)** שמתמלא כשהבוט עונה,

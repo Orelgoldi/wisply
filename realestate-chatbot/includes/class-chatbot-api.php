@@ -603,6 +603,18 @@ class Wisply_Chatbot_API {
         }
         update_option( 'wisply_leads', $leads, false );
 
+        // Real-estate edition: let the CRM layer forward the lead to an external CRM.
+        do_action( 'wisply_lead_captured', [
+            'name'       => $name,
+            'phone'      => $phone,
+            'email'      => $email,
+            'summary'    => $summary,
+            'interest'   => $interest,
+            'source'     => $source,
+            'department' => $department,
+            'page'       => $page_url ?? '',
+        ] );
+
         // Audit log (section 13/20)
         error_log( sprintf(
             '[Wisply] Lead captured: %s | consent=%s v%s @ %s | source=%s | dept=%s',

@@ -245,6 +245,19 @@ class Wisply_Scheduler {
 
 		$this->notify( $start, $name, $phone, $page, (bool) $event_id );
 
+		// Forward to the CRM webhook (no-op unless configured). Never blocks the booking.
+		if ( class_exists( 'Wisply_CRM' ) ) {
+			Wisply_CRM::get_instance()->send_booking( [
+				'name'     => $name,
+				'phone'    => $phone,
+				'start'    => $start->format( 'c' ),
+				'end'      => gmdate( 'c', $endTs ),
+				'duration' => $dur,
+				'page'     => $page,
+				'synced'   => (bool) $event_id,
+			] );
+		}
+
 		return rest_ensure_response( [ 'ok' => true ] );
 	}
 

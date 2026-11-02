@@ -184,6 +184,10 @@ class Wisply_Database {
             'gcal_client_secret'   => '',
             'gcal_calendar_id'     => 'primary',
             'gcal_refresh_token'   => '',
+            // Generic CRM webhook — bookings + leads POST here as JSON when enabled.
+            'crm_enabled'          => '0',
+            'crm_webhook_url'      => '',
+            'crm_webhook_secret'   => '',       // HMAC key for X-Wisply-Signature
 
             'suggested_questions_he' => "אילו פרויקטים יש לכם?\nאני רוצה לקבוע פגישה\nמה טווח המחירים?\nאיפה הפרויקטים ממוקמים?",
             'suggested_questions_en' => "What do you offer?\nHow can I contact you?\nWhere are you located?\nWhat are your opening hours?",
@@ -419,7 +423,7 @@ class Wisply_Database {
     // ─── Settings ─────────────────────────────────────────────────────────────
 
     /** Fields that contain secrets and must be stored encrypted. */
-    private const ENCRYPTED_KEYS = [ 'ai_api_key', 'openai_api_key', 'gcal_client_secret', 'gcal_refresh_token' ];
+    private const ENCRYPTED_KEYS = [ 'ai_api_key', 'openai_api_key', 'gcal_client_secret', 'gcal_refresh_token', 'crm_webhook_secret' ];
 
     public function get_setting( string $key, mixed $default = null ): mixed {
         $table = $this->db->prefix . self::TABLE_SETTINGS;
